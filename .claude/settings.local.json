@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const k = process.env.ANTHROPIC_API_KEY; console.log\\('Key present:', !!k\\); if\\(k\\) console.log\\('Length:', k.length, '| Starts with:', k.slice\\(0,10\\), '| Has quotes:', k.startsWith\\('\\\\\"'\\) || k.startsWith\\(\\\\\"'\\\\\"\\)\\);\")"
+    ]
+  }
+}
