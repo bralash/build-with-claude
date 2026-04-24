@@ -9,13 +9,24 @@
   <body>
     <header>
       <h1>DevQ</h1>
-      <p>Technical Q&amp;A powered by Claude — ask anything about code, systems, or software.</p>
+      <p>A multi-persona Q&amp;A assistant powered by Claude.</p>
     </header>
 
     <div class="card">
+      <div class="persona-row">
+        <label for="persona" class="persona-label">Assistant persona</label>
+        <select id="persona">
+          <option value="technical">💻 Technical &amp; Code</option>
+          <option value="marketing">📣 Marketing</option>
+          <option value="hr">🤝 Human Resources</option>
+          <option value="training">🎓 Training &amp; Teaching</option>
+          <option value="recruitment">🔍 Recruitment</option>
+        </select>
+      </div>
+      <p id="persona-description" class="persona-description"></p>
       <textarea
         id="question"
-        placeholder="e.g. What is the difference between a process and a thread?"
+        placeholder="Ask your question…"
         autofocus
       ></textarea>
       <div class="actions">
@@ -31,6 +42,7 @@
       <div class="label">Claude's Answer</div>
       <div id="answer" class="answer"></div>
       <div class="meta">
+        <span id="meta-persona"></span>
         <span id="meta-model"></span>
         <span id="meta-stop"></span>
       </div>
