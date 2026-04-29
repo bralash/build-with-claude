@@ -114,6 +114,64 @@ app.post("/api/ask", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+app.post("/api/ask-stream", async (req: Request, res: Response): Promise<void> => {
+  const { question, persona, model } = req.body as {
+    question?: string;
+    persona?: string;
+    model?: string;
+  };
+
+  if (!question || question.trim() === "") {
+    res.status(400).json({ error: "Question is required." });
+    return;
+  }
+
+  const systemPrompt  = PERSONAS[persona ?? ""] ?? PERSONAS.casual;
+  const selectedModel = (ALLOWED_MODELS as readonly string[]).includes(model ?? "")
+    ? (model as AllowedModel)
+    : DEFAULT_MODEL;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  try {
+    const stream = client.messages.stream({
+      model: selectedModel,
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: "user", content: question.trim() }],
+    });
+
+    for await (const event of stream) {
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+        res.write(`data: ${JSON.stringify({ type: "delta", text: event.delta.text })}\n\n`);
+      }
+    }
+
+    const final = await stream.finalMessage();
+    res.write(`data: ${JSON.stringify({ type: "done", stop_reason: final.stop_reason, model: final.model })}\n\n`);
+  } catch (err) {
+    if (err instanceof Anthropic.APIError) {
+      const status = err.status ?? 500;
+      const userMessage =
+        status === 401
+          ? "Invalid API key. Check your ANTHROPIC_API_KEY."
+          : status === 429
+            ? "Rate limit reached. Please wait a moment and try again."
+            : status === 529
+              ? "Claude is currently overloaded. Please try again shortly."
+              : `API error (${status}): ${err.message}`;
+      res.write(`data: ${JSON.stringify({ type: "error", message: userMessage })}\n\n`);
+    } else {
+      console.error("Unexpected error:", err);
+      res.write(`data: ${JSON.stringify({ type: "error", message: "An unexpected error occurred." })}\n\n`);
+    }
+  } finally {
+    res.end();
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
