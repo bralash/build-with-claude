@@ -1,90 +1,176 @@
-const questionEl = document.getElementById("question");
-const askBtn = document.getElementById("ask-btn");
-const personaEl = document.getElementById("persona");
-const personaDesc = document.getElementById("persona-description");
-const responseSection = document.getElementById("response-section");
-const answerEl = document.getElementById("answer");
-const errorCard = document.getElementById("error-card");
-const errorMsg = document.getElementById("error-msg");
-const metaModel = document.getElementById("meta-model");
-const metaStop = document.getElementById("meta-stop");
-const metaPersona = document.getElementById("meta-persona");
+const questionEl   = document.getElementById("question");
+const askBtn       = document.getElementById("ask-btn");
+const personaEl    = document.getElementById("persona");
+const chatMessages = document.getElementById("chat-messages");
+const emptyState   = document.getElementById("empty-state");
+const emptySub     = document.getElementById("empty-sub");
 
 const PERSONA_META = {
-  technical:   { placeholder: "e.g. What is the difference between a process and a thread?",     desc: "Answers questions about programming, debugging, system design, and software best practices." },
-  marketing:   { placeholder: "e.g. Write a tagline for a B2B SaaS product targeting HR teams.",  desc: "Helps with brand strategy, copywriting, campaigns, content marketing, and go-to-market planning." },
-  hr:          { placeholder: "e.g. How should I handle a performance improvement plan?",          desc: "Advises on employee relations, HR policies, onboarding, compliance, and workplace culture." },
-  training:    { placeholder: "e.g. Design a 4-week onboarding plan for new sales hires.",        desc: "Designs curricula, lesson plans, learning objectives, and clear explanations for any skill level." },
-  recruitment: { placeholder: "e.g. Write interview questions for a senior product manager role.", desc: "Assists with job descriptions, interview frameworks, candidate assessment, and employer branding." },
+  technical:   {
+    label: "💻 Technical & Code",
+    desc:  "Ask anything about programming, debugging, system design, or best practices.",
+  },
+  marketing:   {
+    label: "📣 Marketing",
+    desc:  "Brand strategy, copywriting, campaigns, content marketing, and go-to-market.",
+  },
+  hr:          {
+    label: "🤝 Human Resources",
+    desc:  "Employee relations, HR policies, onboarding, compliance, and workplace culture.",
+  },
+  training:    {
+    label: "🎓 Training & Teaching",
+    desc:  "Curricula, lesson plans, learning objectives, and explanations for any skill level.",
+  },
+  recruitment: {
+    label: "🔍 Recruitment",
+    desc:  "Job descriptions, interview frameworks, candidate assessment, and employer branding.",
+  },
 };
 
-function applyPersona() {
-  const meta = PERSONA_META[personaEl.value];
-  questionEl.placeholder = meta.placeholder;
-  personaDesc.textContent = meta.desc;
+// ── Initialise empty-state description ──────────────────────────────────────
+function updateEmptyState() {
+  emptySub.textContent = PERSONA_META[personaEl.value].desc;
 }
 
-personaEl.addEventListener("change", () => {
-  applyPersona();
-  responseSection.style.display = "none";
-  errorCard.style.display = "none";
+personaEl.addEventListener("change", updateEmptyState);
+updateEmptyState();
+
+// ── Auto-grow textarea ───────────────────────────────────────────────────────
+questionEl.addEventListener("input", () => {
+  questionEl.style.height = "auto";
+  questionEl.style.height = questionEl.scrollHeight + "px";
 });
 
+// ── Keyboard shortcut: Enter sends, Shift+Enter new line ────────────────────
 questionEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) askQuestion();
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    askQuestion();
+  }
 });
 
+askBtn.addEventListener("click", askQuestion);
+
+// ── Core ask function ────────────────────────────────────────────────────────
 async function askQuestion() {
   const question = questionEl.value.trim();
   if (!question) return;
 
   const persona = personaEl.value;
 
+  // Hide empty state on first message
+  emptyState.style.display = "none";
+
+  // Append user bubble
+  appendUserMessage(question);
+
+  // Clear + reset input
+  questionEl.value = "";
+  questionEl.style.height = "auto";
   setLoading(true);
-  hideAll();
+
+  // Add assistant placeholder (thinking dots)
+  const pair       = document.createElement("div");
+  pair.className   = "message-pair";
+  const assistantEl = buildAssistantShell(persona);
+  const bodyEl      = assistantEl.querySelector(".assistant-body");
+  const thinkingEl  = document.createElement("div");
+  thinkingEl.className = "thinking";
+  thinkingEl.innerHTML = "<span></span><span></span><span></span>";
+  bodyEl.appendChild(thinkingEl);
+  pair.appendChild(assistantEl);
+  chatMessages.appendChild(pair);
+  scrollToBottom();
 
   try {
-    const res = await fetch("/api/ask", {
-      method: "POST",
+    const res  = await fetch("/api/ask", {
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, persona }),
+      body:    JSON.stringify({ question, persona }),
     });
 
     const data = await res.json();
 
-    if (!res.ok) {
-      showError(data.error ?? "An unknown error occurred.");
-      return;
-    }
+    // Replace thinking dots with real content
+    thinkingEl.remove();
 
-    answerEl.innerHTML = marked.parse(data.answer);
-    metaModel.textContent = `Model: ${data.model}`;
-    metaStop.textContent = `Stop reason: ${data.stop_reason}`;
-    metaPersona.textContent = `Persona: ${personaEl.options[personaEl.selectedIndex].text}`;
-    responseSection.style.display = "block";
+    if (!res.ok) {
+      const errEl = document.createElement("div");
+      errEl.className   = "error-bubble";
+      errEl.textContent = data.error ?? "An unknown error occurred.";
+      bodyEl.appendChild(errEl);
+    } else {
+      const answerEl = document.createElement("div");
+      answerEl.className   = "answer";
+      answerEl.innerHTML   = marked.parse(data.answer);
+      bodyEl.appendChild(answerEl);
+    }
   } catch {
-    showError("Network error — could not reach the server. Is it running?");
+    thinkingEl.remove();
+    const errEl = document.createElement("div");
+    errEl.className   = "error-bubble";
+    errEl.textContent = "Network error — could not reach the server.";
+    bodyEl.appendChild(errEl);
   } finally {
     setLoading(false);
+    scrollToBottom();
   }
 }
 
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+function appendUserMessage(text) {
+  const pair      = document.createElement("div");
+  pair.className  = "message-pair";
+
+  const msg       = document.createElement("div");
+  msg.className   = "user-message";
+
+  const bubble    = document.createElement("div");
+  bubble.className   = "user-bubble";
+  bubble.textContent = text;
+
+  msg.appendChild(bubble);
+  pair.appendChild(msg);
+  chatMessages.appendChild(pair);
+  scrollToBottom();
+}
+
+function buildAssistantShell(persona) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "assistant-message";
+
+  const avatar      = document.createElement("div");
+  avatar.className  = "assistant-avatar";
+  avatar.textContent = "D";
+
+  const body        = document.createElement("div");
+  body.className    = "assistant-body";
+
+  const header      = document.createElement("div");
+  header.className  = "assistant-header";
+
+  const name        = document.createElement("span");
+  name.className    = "assistant-name";
+  name.textContent  = "DevQ";
+
+  const badge       = document.createElement("span");
+  badge.className   = "persona-badge";
+  badge.textContent = PERSONA_META[persona].label;
+
+  header.appendChild(name);
+  header.appendChild(badge);
+  body.appendChild(header);
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(body);
+  return wrapper;
+}
+
+function scrollToBottom() {
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
 function setLoading(on) {
-  askBtn.disabled = on;
-  askBtn.innerHTML = on
-    ? '<span class="spinner"></span>Thinking…'
-    : "Ask Claude";
+  askBtn.disabled        = on;
+  questionEl.disabled    = on;
 }
-
-function hideAll() {
-  responseSection.style.display = "none";
-  errorCard.style.display = "none";
-}
-
-function showError(msg) {
-  errorMsg.textContent = msg;
-  errorCard.style.display = "block";
-}
-
-// Initialise on load
-applyPersona();
