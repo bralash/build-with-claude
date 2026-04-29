@@ -11,31 +11,40 @@ const settingsCloseBtn   = document.getElementById("settings-close");
 const settingsPanel      = document.getElementById("settings-panel");
 const settingsOverlay    = document.getElementById("settings-overlay");
 const personaListEl      = document.getElementById("persona-list");
-const swatchGrid         = document.getElementById("swatch-grid");
 const themeLightBtn      = document.getElementById("theme-light");
 const themeDarkBtn       = document.getElementById("theme-dark");
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PERSONA_META = {
-  technical: {
-    label: "Technical & Code",
-    desc:  "Programming, debugging, system design, and software best practices.",
+  casual: {
+    label:       "Casual",
+    desc:        "Relaxed and conversational — like chatting with a friend.",
+    accent:      "cream",
+    placeholder: "What's on your mind?",
   },
-  marketing: {
-    label: "Marketing",
-    desc:  "Brand strategy, copywriting, campaigns, and go-to-market planning.",
+  playful: {
+    label:       "Playful",
+    desc:        "Upbeat and fun — keeps things light and entertaining.",
+    accent:      "coral",
+    placeholder: "What are we getting into today?",
   },
-  hr: {
-    label: "Human Resources",
-    desc:  "Employee relations, HR policies, onboarding, and workplace culture.",
+  professional: {
+    label:       "Professional",
+    desc:        "Formal and precise — structured, clear, and authoritative.",
+    accent:      "taupe",
+    placeholder: "State your question.",
   },
-  training: {
-    label: "Training & Teaching",
-    desc:  "Curricula, lesson plans, and clear explanations for any skill level.",
+  creative: {
+    label:       "Creative",
+    desc:        "Imaginative and expressive — explores ideas from fresh angles.",
+    accent:      "pink",
+    placeholder: "What idea shall we explore?",
   },
-  recruitment: {
-    label: "Recruitment",
-    desc:  "Job descriptions, interview frameworks, and employer branding.",
+  mentor: {
+    label:       "Mentor",
+    desc:        "Patient and encouraging — builds understanding, not just answers.",
+    accent:      "sage",
+    placeholder: "What would you like to understand?",
   },
 };
 
@@ -45,34 +54,21 @@ const MODEL_META = {
   "claude-opus-4-5":   { label: "Opus"   },
 };
 
-const ACCENT_META = {
-  coral:  { color: "#FEC5BB", label: "Coral"  },
-  sage:   { color: "#D8E2DC", label: "Sage"   },
-  blush:  { color: "#F8EDEB", label: "Blush"  },
-  pink:   { color: "#FAE1DD", label: "Rose"   },
-  taupe:  { color: "#DED6CE", label: "Taupe"  },
-  cream:  { color: "#F5EBE0", label: "Cream"  },
-};
-
-const DEFAULT_PERSONA = "technical";
+const DEFAULT_PERSONA = "casual";
 const DEFAULT_MODEL   = "claude-sonnet-4-6";
-const DEFAULT_ACCENT  = "coral";
 const DEFAULT_THEME   = "light";
 
 // ── State (loaded from localStorage) ─────────────────────────────────────────
-let currentPersona = localStorage.getItem("devq-persona") || DEFAULT_PERSONA;
-let currentModel   = localStorage.getItem("devq-model")   || DEFAULT_MODEL;
-let currentAccent  = localStorage.getItem("devq-accent")  || DEFAULT_ACCENT;
-let currentTheme   = localStorage.getItem("devq-theme")   || DEFAULT_THEME;
+let currentPersona = localStorage.getItem("molly-persona") || DEFAULT_PERSONA;
+let currentModel   = localStorage.getItem("molly-model")   || DEFAULT_MODEL;
+let currentTheme   = localStorage.getItem("molly-theme")   || DEFAULT_THEME;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function init() {
   applyTheme(currentTheme);
-  applyAccent(currentAccent);
   buildPersonaList();
-  applyPersona(currentPersona);
+  applyPersona(currentPersona);  // also applies that persona's accent
   applyModel(currentModel);
-  buildSwatches();
 })();
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -99,7 +95,7 @@ themeDarkBtn.addEventListener("click",  () => selectTheme("dark"));
 
 function selectTheme(theme) {
   currentTheme = theme;
-  localStorage.setItem("devq-theme", theme);
+  localStorage.setItem("molly-theme", theme);
   applyTheme(theme);
 }
 
@@ -107,34 +103,6 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   themeLightBtn.classList.toggle("active", theme === "light");
   themeDarkBtn.classList.toggle("active",  theme === "dark");
-}
-
-// ── Accent colour ─────────────────────────────────────────────────────────────
-function buildSwatches() {
-  swatchGrid.innerHTML = "";
-  Object.entries(ACCENT_META).forEach(([key, meta]) => {
-    const btn = document.createElement("button");
-    btn.className   = "swatch" + (key === currentAccent ? " active" : "");
-    btn.style.background = meta.color;
-    btn.title       = meta.label;
-    btn.setAttribute("aria-label", meta.label);
-    btn.addEventListener("click", () => selectAccent(key));
-    swatchGrid.appendChild(btn);
-  });
-}
-
-function selectAccent(key) {
-  currentAccent = key;
-  localStorage.setItem("devq-accent", key);
-  applyAccent(key);
-  // refresh swatch active states
-  swatchGrid.querySelectorAll(".swatch").forEach((s, i) => {
-    s.classList.toggle("active", Object.keys(ACCENT_META)[i] === key);
-  });
-}
-
-function applyAccent(key) {
-  document.documentElement.dataset.accent = key || DEFAULT_ACCENT;
 }
 
 // ── Persona ───────────────────────────────────────────────────────────────────
@@ -154,15 +122,18 @@ function buildPersonaList() {
 
 function selectPersona(key) {
   currentPersona = key;
-  localStorage.setItem("devq-persona", key);
+  localStorage.setItem("molly-persona", key);
   applyPersona(key);
   buildPersonaList();
 }
 
 function applyPersona(key) {
   const meta = PERSONA_META[key] || PERSONA_META[DEFAULT_PERSONA];
-  activePersonaBadge.textContent = meta.label;
-  emptySub.textContent           = meta.desc;
+  // Apply this persona's dedicated accent colour
+  document.documentElement.dataset.accent = meta.accent;
+  activePersonaBadge.textContent  = meta.label;
+  emptySub.textContent            = meta.desc;
+  questionEl.placeholder          = meta.placeholder;
 }
 
 // ── Model selector ────────────────────────────────────────────────────────────
@@ -173,7 +144,7 @@ modelChipsEl.querySelectorAll(".model-chip").forEach((chip) => {
 function selectModel(modelId) {
   if (!MODEL_META[modelId]) return;
   currentModel = modelId;
-  localStorage.setItem("devq-model", modelId);
+  localStorage.setItem("molly-model", modelId);
   applyModel(modelId);
 }
 
@@ -275,7 +246,7 @@ function buildAssistantShell(persona, modelId) {
 
   const avatar   = Object.assign(document.createElement("div"), {
     className: "assistant-avatar",
-    textContent: "D",
+    textContent: "M",
   });
 
   const body     = document.createElement("div");
@@ -284,7 +255,7 @@ function buildAssistantShell(persona, modelId) {
   const header   = document.createElement("div");
   header.className = "assistant-header";
   header.innerHTML = `
-    <span class="assistant-name">DevQ</span>
+    <span class="assistant-name">Molly</span>
     <span class="persona-badge">${personaMeta.label}</span>
     <span class="model-badge">${modelMeta.label}</span>`;
 
