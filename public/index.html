@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light" data-accent="coral">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DevQ — Technical Q&A powered by Claude</title>
+    <title>DevQ — Q&A powered by Claude</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -13,12 +16,13 @@
       <header class="topbar">
         <div class="topbar-brand">
           <span class="brand-name">DevQ</span>
+          <span class="brand-divider">·</span>
           <span class="brand-tag">powered by Claude</span>
         </div>
         <div class="topbar-actions">
           <span class="active-persona-badge" id="active-persona-badge"></span>
-          <button class="icon-btn" id="settings-open" aria-label="Open settings">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+          <button class="icon-btn" id="settings-open" aria-label="Open settings" title="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"/>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06
@@ -38,8 +42,7 @@
       <!-- Chat thread -->
       <main id="chat-messages">
         <div class="empty-state" id="empty-state">
-          <div class="empty-icon">💬</div>
-          <p class="empty-title">Start a conversation</p>
+          <p class="empty-title">What would you like to explore?</p>
           <p class="empty-sub" id="empty-sub"></p>
         </div>
       </main>
@@ -49,7 +52,7 @@
         <div class="input-wrap">
           <textarea id="question" rows="1" placeholder="Ask a question…" autofocus></textarea>
           <button id="ask-btn" aria-label="Send">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" stroke-width="2.5"
               stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/>
@@ -58,42 +61,30 @@
           </button>
         </div>
 
-        <!-- Model selector -->
         <div class="model-row">
           <span class="model-row-label">Model</span>
           <div class="model-chips" id="model-chips">
-            <button class="model-chip" data-model="claude-haiku-4-5">
-              ⚡ <span>Haiku</span>
-            </button>
-            <button class="model-chip" data-model="claude-sonnet-4-6">
-              ✦ <span>Sonnet</span>
-            </button>
-            <button class="model-chip" data-model="claude-opus-4-5">
-              🧠 <span>Opus</span>
-            </button>
+            <button class="model-chip" data-model="claude-haiku-4-5">Haiku <span class="chip-hint">Fast</span></button>
+            <button class="model-chip" data-model="claude-sonnet-4-6">Sonnet <span class="chip-hint">Balanced</span></button>
+            <button class="model-chip" data-model="claude-opus-4-5">Opus <span class="chip-hint">Capable</span></button>
           </div>
         </div>
 
-        <p class="input-hint">
-          <kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for new line
-        </p>
+        <p class="input-hint"><kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for new line</p>
       </footer>
-
     </div>
 
-    <!-- Settings overlay -->
+    <!-- Settings overlay + panel -->
     <div class="settings-overlay" id="settings-overlay"></div>
-
-    <!-- Settings panel -->
     <aside class="settings-panel" id="settings-panel" aria-hidden="true">
+
       <div class="settings-header">
         <h2 class="settings-title">Settings</h2>
         <button class="icon-btn" id="settings-close" aria-label="Close settings">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" stroke-width="2.5"
             stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
       </div>
@@ -110,17 +101,19 @@
         <!-- Appearance -->
         <section class="settings-section">
           <div class="settings-section-title">Appearance</div>
-          <div class="settings-section-desc">Switch between dark and light mode.</div>
-          <div class="theme-switcher">
-            <button class="theme-option" data-theme-val="dark" id="theme-dark">
-              <span class="theme-option-icon">🌙</span>
-              <span>Dark</span>
+          <div class="settings-section-desc">Set the mode and choose an accent colour.</div>
+
+          <div class="appearance-mode" id="appearance-mode">
+            <button class="mode-btn" data-theme-val="light" id="theme-light">
+              <span class="mode-icon">☀︎</span> Light
             </button>
-            <button class="theme-option" data-theme-val="light" id="theme-light">
-              <span class="theme-option-icon">☀️</span>
-              <span>Light</span>
+            <button class="mode-btn" data-theme-val="dark" id="theme-dark">
+              <span class="mode-icon">☽</span> Dark
             </button>
           </div>
+
+          <div class="swatch-label">Accent colour</div>
+          <div class="swatch-grid" id="swatch-grid"></div>
         </section>
 
         <!-- Streaming -->
@@ -128,11 +121,11 @@
           <div class="settings-row-between">
             <div>
               <div class="settings-section-title">
-                Response Streaming
+                Streaming
                 <span class="coming-soon-badge">Coming soon</span>
               </div>
               <div class="settings-section-desc">
-                Stream tokens in real time as Claude generates the response.
+                Display Claude's response token by token as it generates.
               </div>
             </div>
             <button class="toggle-switch" disabled aria-disabled="true" aria-checked="false" role="switch">
