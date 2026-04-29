@@ -50,22 +50,38 @@ Give practical, bias-aware advice. Help identify what great candidates look like
 and how to attract and assess them effectively.`,
 };
 
+const ALLOWED_MODELS = [
+  "claude-haiku-4-5",
+  "claude-sonnet-4-6",
+  "claude-opus-4-5",
+] as const;
+
+type AllowedModel = (typeof ALLOWED_MODELS)[number];
+const DEFAULT_MODEL: AllowedModel = "claude-sonnet-4-6";
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.post("/api/ask", async (req: Request, res: Response): Promise<void> => {
-  const { question, persona } = req.body as { question?: string; persona?: string };
+  const { question, persona, model } = req.body as {
+    question?: string;
+    persona?: string;
+    model?: string;
+  };
 
   if (!question || question.trim() === "") {
     res.status(400).json({ error: "Question is required." });
     return;
   }
 
-  const systemPrompt = PERSONAS[persona ?? ""] ?? PERSONAS.technical;
+  const systemPrompt  = PERSONAS[persona ?? ""] ?? PERSONAS.technical;
+  const selectedModel = (ALLOWED_MODELS as readonly string[]).includes(model ?? "")
+    ? (model as AllowedModel)
+    : DEFAULT_MODEL;
 
   try {
     const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: selectedModel,
       max_tokens: 1024,
       system: systemPrompt,
       messages: [{ role: "user", content: question.trim() }],
