@@ -13,6 +13,7 @@ const settingsOverlay    = document.getElementById("settings-overlay");
 const personaListEl      = document.getElementById("persona-list");
 const themeLightBtn      = document.getElementById("theme-light");
 const themeDarkBtn       = document.getElementById("theme-dark");
+const streamingToggle    = document.getElementById("streaming-toggle");
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PERSONA_META = {
@@ -59,9 +60,10 @@ const DEFAULT_MODEL   = "claude-sonnet-4-6";
 const DEFAULT_THEME   = "light";
 
 // ── State (loaded from localStorage) ─────────────────────────────────────────
-let currentPersona = localStorage.getItem("molly-persona") || DEFAULT_PERSONA;
-let currentModel   = localStorage.getItem("molly-model")   || DEFAULT_MODEL;
-let currentTheme   = localStorage.getItem("molly-theme")   || DEFAULT_THEME;
+let currentPersona   = localStorage.getItem("molly-persona")   || DEFAULT_PERSONA;
+let currentModel     = localStorage.getItem("molly-model")     || DEFAULT_MODEL;
+let currentTheme     = localStorage.getItem("molly-theme")     || DEFAULT_THEME;
+let streamingEnabled = localStorage.getItem("molly-streaming") === "true";
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function init() {
@@ -69,6 +71,7 @@ let currentTheme   = localStorage.getItem("molly-theme")   || DEFAULT_THEME;
   buildPersonaList();
   applyPersona(currentPersona);  // also applies that persona's accent
   applyModel(currentModel);
+  applyStreaming(streamingEnabled);
 })();
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -103,6 +106,18 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   themeLightBtn.classList.toggle("active", theme === "light");
   themeDarkBtn.classList.toggle("active",  theme === "dark");
+}
+
+// ── Streaming toggle ──────────────────────────────────────────────────────────
+streamingToggle.addEventListener("click", () => {
+  streamingEnabled = !streamingEnabled;
+  localStorage.setItem("molly-streaming", streamingEnabled);
+  applyStreaming(streamingEnabled);
+});
+
+function applyStreaming(enabled) {
+  streamingToggle.setAttribute("aria-checked", enabled ? "true" : "false");
+  streamingToggle.classList.toggle("active", enabled);
 }
 
 // ── Persona ───────────────────────────────────────────────────────────────────
@@ -172,23 +187,33 @@ async function askQuestion() {
   if (!question) return;
 
   emptyState.style.display = "none";
-
   appendUserMessage(question);
   questionEl.value = "";
   questionEl.style.height = "auto";
   setLoading(true);
 
-  const pair         = document.createElement("div");
-  pair.className     = "message-pair";
-  const assistantEl  = buildAssistantShell(currentPersona, currentModel);
-  const bodyEl       = assistantEl.querySelector(".assistant-body");
-  const thinkingEl   = Object.assign(document.createElement("div"), { className: "thinking" });
+  const pair        = document.createElement("div");
+  pair.className    = "message-pair";
+  const assistantEl = buildAssistantShell(currentPersona, currentModel);
+  const bodyEl      = assistantEl.querySelector(".assistant-body");
+  const thinkingEl  = Object.assign(document.createElement("div"), { className: "thinking" });
   thinkingEl.innerHTML = "<span></span><span></span><span></span>";
   bodyEl.appendChild(thinkingEl);
   pair.appendChild(assistantEl);
   chatMessages.appendChild(pair);
   scrollToBottom();
 
+  if (streamingEnabled) {
+    await askStreaming(question, bodyEl, thinkingEl);
+  } else {
+    await askBatch(question, bodyEl, thinkingEl);
+  }
+
+  setLoading(false);
+  scrollToBottom();
+}
+
+async function askBatch(question, bodyEl, thinkingEl) {
   try {
     const res  = await fetch("/api/ask", {
       method:  "POST",
@@ -215,9 +240,74 @@ async function askQuestion() {
       textContent: "Network error — could not reach the server.",
     });
     bodyEl.appendChild(errEl);
-  } finally {
-    setLoading(false);
-    scrollToBottom();
+  }
+}
+
+async function askStreaming(question, bodyEl, thinkingEl) {
+  const contentEl = document.createElement("div");
+  contentEl.className = "answer";
+  let rawText = "";
+  let firstChunk = true;
+
+  try {
+    const res = await fetch("/api/ask-stream", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ question, persona: currentPersona, model: currentModel }),
+    });
+
+    if (!res.ok) {
+      thinkingEl.remove();
+      const errEl = Object.assign(document.createElement("div"), {
+        className: "error-bubble",
+        textContent: "Stream error — could not reach the server.",
+      });
+      bodyEl.appendChild(errEl);
+      return;
+    }
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer    = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = JSON.parse(line.slice(6));
+
+        if (payload.type === "delta") {
+          if (firstChunk) {
+            thinkingEl.remove();
+            bodyEl.appendChild(contentEl);
+            firstChunk = false;
+          }
+          rawText += payload.text;
+          contentEl.innerHTML = marked.parse(rawText);
+          scrollToBottom();
+        } else if (payload.type === "error") {
+          thinkingEl.remove();
+          const errEl = Object.assign(document.createElement("div"), {
+            className: "error-bubble",
+            textContent: payload.message,
+          });
+          bodyEl.appendChild(errEl);
+        }
+      }
+    }
+  } catch {
+    thinkingEl.remove();
+    const errEl = Object.assign(document.createElement("div"), {
+      className: "error-bubble",
+      textContent: "Network error — could not reach the server.",
+    });
+    bodyEl.appendChild(errEl);
   }
 }
 

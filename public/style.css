@@ -737,10 +737,21 @@ button#ask-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   border: none;
   background: var(--border);
   position: relative;
-  cursor: not-allowed;
-  opacity: 0.4;
+  cursor: pointer;
+  opacity: 1;
   padding: 0;
   margin-top: 2px;
+  transition: background 0.2s;
+}
+
+.toggle-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.toggle-switch.active,
+.toggle-switch[aria-checked="true"] {
+  background: var(--accent-fg);
 }
 
 .toggle-thumb {
@@ -748,8 +759,13 @@ button#ask-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   top: 2.5px; left: 2.5px;
   width: 16px; height: 16px;
   border-radius: 50%;
-  background: var(--text-muted);
+  background: #fff;
   transition: transform 0.2s;
+}
+
+.toggle-switch.active .toggle-thumb,
+.toggle-switch[aria-checked="true"] .toggle-thumb {
+  transform: translateX(17px);
 }
 
 /* ── Coming soon badge ──────────────────────────────────────────────────────── */
