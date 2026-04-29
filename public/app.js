@@ -59,9 +59,9 @@ const DEFAULT_MODEL   = "claude-sonnet-4-6";
 const DEFAULT_THEME   = "light";
 
 // ── State (loaded from localStorage) ─────────────────────────────────────────
-let currentPersona = localStorage.getItem("devq-persona") || DEFAULT_PERSONA;
-let currentModel   = localStorage.getItem("devq-model")   || DEFAULT_MODEL;
-let currentTheme   = localStorage.getItem("devq-theme")   || DEFAULT_THEME;
+let currentPersona = localStorage.getItem("molly-persona") || DEFAULT_PERSONA;
+let currentModel   = localStorage.getItem("molly-model")   || DEFAULT_MODEL;
+let currentTheme   = localStorage.getItem("molly-theme")   || DEFAULT_THEME;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function init() {
@@ -95,7 +95,7 @@ themeDarkBtn.addEventListener("click",  () => selectTheme("dark"));
 
 function selectTheme(theme) {
   currentTheme = theme;
-  localStorage.setItem("devq-theme", theme);
+  localStorage.setItem("molly-theme", theme);
   applyTheme(theme);
 }
 
@@ -122,7 +122,7 @@ function buildPersonaList() {
 
 function selectPersona(key) {
   currentPersona = key;
-  localStorage.setItem("devq-persona", key);
+  localStorage.setItem("molly-persona", key);
   applyPersona(key);
   buildPersonaList();
 }
@@ -144,7 +144,7 @@ modelChipsEl.querySelectorAll(".model-chip").forEach((chip) => {
 function selectModel(modelId) {
   if (!MODEL_META[modelId]) return;
   currentModel = modelId;
-  localStorage.setItem("devq-model", modelId);
+  localStorage.setItem("molly-model", modelId);
   applyModel(modelId);
 }
 
@@ -255,7 +255,7 @@ function buildAssistantShell(persona, modelId) {
   const header   = document.createElement("div");
   header.className = "assistant-header";
   header.innerHTML = `
-    <span class="assistant-name">DevQ</span>
+    <span class="assistant-name">Molly</span>
     <span class="persona-badge">${personaMeta.label}</span>
     <span class="model-badge">${modelMeta.label}</span>`;
 

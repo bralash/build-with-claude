@@ -1,10 +1,10 @@
-# DevQ — Technical Q&A powered by Claude
+# Molly — Technical Q&A powered by Claude
 
 A web application where software developers can ask technical questions and get clear, concise answers from Claude.
 
 ## What it does
 
-DevQ is a domain-specific Q&A assistant for software development. Ask it anything about programming languages, frameworks, debugging, system design, or best practices — it answers directly, with code examples where helpful.
+Molly is a domain-specific Q&A assistant for software development. Ask it anything about programming languages, frameworks, debugging, system design, or best practices — it answers directly, with code examples where helpful.
 
 ## How to run locally
 
