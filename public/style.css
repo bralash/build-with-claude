@@ -74,20 +74,20 @@
   --bg-card:        #221C17;
   --bg-elevated:    #2A231D;
   --bg-input:       #221C17;
-  --border:         #3D3028;
-  --border-subtle:  #2D2520;
+  --border:         #7A6050;  /* 3.3:1 on bg-base — passes WCAG UI component threshold */
+  --border-subtle:  #38281E;  /* decorative dividers only */
 
-  --text-primary:   #F2EAE0;
-  --text-secondary: #A08878;
-  --text-muted:     #6B5748;
-  --text-faint:     #3D3028;
+  --text-primary:   #F2EAE0;  /* 15.5:1 ✓ */
+  --text-secondary: #D4BEA8;  /* 10.3:1 ✓  — main answer & body text */
+  --text-muted:     #A89076;  /*  6.1:1 ✓  — labels, badges, placeholders */
+  --text-faint:     #846C58;  /*  3.7:1 △  — keyboard hints (decorative) */
 
   --shadow-sm:    0 1px 3px rgba(0,0,0,0.25);
   --shadow-md:    0 4px 16px rgba(0,0,0,0.35);
   --shadow-panel: 0 8px 40px rgba(0,0,0,0.55);
 
   --code-bg:    #1A140F;
-  --code-color: #F4B8A8;
+  --code-color: #F4B8A8;  /* 10.7:1 on code-bg ✓ */
 
   --error-bg:     #2A1410;
   --error-border: #7F2818;
@@ -809,4 +809,60 @@ button#ask-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   padding: 0.1rem 0.45rem;
   color: var(--text-muted);
   vertical-align: middle;
+}
+
+/* ── Dark mode: accent text fix ────────────────────────────────────────────── */
+/*
+  In light mode, --accent-fg (dark colour) is used as text because it sits on
+  a pastel background (bubble, button). On a dark page background, those same
+  dark values drop to ≈1.5:1. Fix: flip interactive labels to --accent-bg
+  (the pastel), which scores 11-16:1 on all dark backgrounds.
+*/
+
+/* Active model chip */
+[data-theme="dark"] .model-chip.active {
+  color: var(--accent-bg);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Active mode button (Light / Dark switcher) */
+[data-theme="dark"] .mode-btn.active {
+  color: var(--accent-bg);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Model badge on assistant message */
+[data-theme="dark"] .model-badge {
+  color: var(--accent-bg);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
+  opacity: 1;
+}
+
+/* Active persona card */
+[data-theme="dark"] .persona-card.active {
+  background: rgba(255, 255, 255, 0.05);
+  border-left-color: var(--accent-bg);
+}
+
+[data-theme="dark"] .persona-card.active .persona-card-name {
+  color: var(--accent-bg);
+}
+
+[data-theme="dark"] .persona-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-left-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Answer links */
+[data-theme="dark"] .answer a {
+  color: var(--accent-bg);
+}
+
+/* Focus ring on input */
+[data-theme="dark"] .input-wrap:focus-within {
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
 }
