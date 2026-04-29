@@ -331,6 +331,15 @@ body {
 
 .answer.streaming { white-space: pre-wrap; }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.chunk-token {
+  animation: fadeIn 0.12s ease-out forwards;
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }

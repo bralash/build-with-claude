@@ -293,7 +293,10 @@ async function askStreaming(question, bodyEl, thinkingEl) {
           }
           rawText += payload.text;
           // Append only the new text — no full re-render
-          contentEl.insertBefore(document.createTextNode(payload.text), cursorEl);
+          const chunk = document.createElement("span");
+          chunk.className = "chunk-token";
+          chunk.textContent = payload.text;
+          contentEl.insertBefore(chunk, cursorEl);
           scrollToBottom();
         } else if (payload.type === "done") {
           // One final markdown render when the stream closes
