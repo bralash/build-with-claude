@@ -245,7 +245,9 @@ async function askBatch(question, bodyEl, thinkingEl) {
 
 async function askStreaming(question, bodyEl, thinkingEl) {
   const contentEl = document.createElement("div");
-  contentEl.className = "answer";
+  contentEl.className = "answer streaming";
+  const cursorEl = document.createElement("span");
+  cursorEl.className = "stream-cursor";
   let rawText = "";
   let firstChunk = true;
 
@@ -276,7 +278,7 @@ async function askStreaming(question, bodyEl, thinkingEl) {
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
-      buffer = lines.pop(); // keep incomplete line
+      buffer = lines.pop();
 
       for (const line of lines) {
         if (!line.startsWith("data: ")) continue;
@@ -285,14 +287,22 @@ async function askStreaming(question, bodyEl, thinkingEl) {
         if (payload.type === "delta") {
           if (firstChunk) {
             thinkingEl.remove();
+            contentEl.appendChild(cursorEl);
             bodyEl.appendChild(contentEl);
             firstChunk = false;
           }
           rawText += payload.text;
-          contentEl.innerHTML = marked.parse(rawText);
+          // Append only the new text — no full re-render
+          contentEl.insertBefore(document.createTextNode(payload.text), cursorEl);
           scrollToBottom();
+        } else if (payload.type === "done") {
+          // One final markdown render when the stream closes
+          cursorEl.remove();
+          contentEl.classList.remove("streaming");
+          contentEl.innerHTML = marked.parse(rawText);
         } else if (payload.type === "error") {
           thinkingEl.remove();
+          cursorEl.remove();
           const errEl = Object.assign(document.createElement("div"), {
             className: "error-bubble",
             textContent: payload.message,
@@ -300,6 +310,13 @@ async function askStreaming(question, bodyEl, thinkingEl) {
           bodyEl.appendChild(errEl);
         }
       }
+    }
+
+    // Fallback: ensure markdown is rendered if done event wasn't received
+    if (!firstChunk && contentEl.classList.contains("streaming")) {
+      cursorEl.remove();
+      contentEl.classList.remove("streaming");
+      contentEl.innerHTML = marked.parse(rawText);
     }
   } catch {
     thinkingEl.remove();
