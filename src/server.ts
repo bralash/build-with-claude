@@ -1,4 +1,5 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ override: true });
 import express, { Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import path from "path";
@@ -11,6 +12,9 @@ if (!apiKey) {
   console.error("ERROR: ANTHROPIC_API_KEY is not set. Create a .env file with your key.");
   process.exit(1);
 }
+
+const maskedKey = `${apiKey.slice(0, 10)}...${apiKey.slice(-4)}`;
+console.log(`API key loaded: ${maskedKey}`);
 
 const client = new Anthropic({ apiKey });
 
