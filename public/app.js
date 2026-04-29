@@ -246,7 +246,7 @@ function buildAssistantShell(persona, modelId) {
 
   const avatar   = Object.assign(document.createElement("div"), {
     className: "assistant-avatar",
-    textContent: "D",
+    textContent: "M",
   });
 
   const body     = document.createElement("div");
