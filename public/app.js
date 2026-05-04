@@ -1,19 +1,21 @@
 // ── DOM refs ─────────────────────────────────────────────────────────────────
-const questionEl         = document.getElementById("question");
-const askBtn             = document.getElementById("ask-btn");
-const chatMessages       = document.getElementById("chat-messages");
-const emptyState         = document.getElementById("empty-state");
-const emptySub           = document.getElementById("empty-sub");
-const activePersonaBadge = document.getElementById("active-persona-badge");
-const modelChipsEl       = document.getElementById("model-chips");
-const settingsOpenBtn    = document.getElementById("settings-open");
-const settingsCloseBtn   = document.getElementById("settings-close");
-const settingsPanel      = document.getElementById("settings-panel");
-const settingsOverlay    = document.getElementById("settings-overlay");
-const personaListEl      = document.getElementById("persona-list");
-const themeLightBtn      = document.getElementById("theme-light");
-const themeDarkBtn       = document.getElementById("theme-dark");
-const streamingToggle    = document.getElementById("streaming-toggle");
+const questionEl          = document.getElementById("question");
+const askBtn              = document.getElementById("ask-btn");
+const chatMessages        = document.getElementById("chat-messages");
+const emptyState          = document.getElementById("empty-state");
+const emptySub            = document.getElementById("empty-sub");
+const activePersonaBadge  = document.getElementById("active-persona-badge");
+const modelChipsEl        = document.getElementById("model-chips");
+const settingsOpenBtn     = document.getElementById("settings-open");
+const settingsCloseBtn    = document.getElementById("settings-close");
+const settingsPanel       = document.getElementById("settings-panel");
+const settingsOverlay     = document.getElementById("settings-overlay");
+const personaListEl       = document.getElementById("persona-list");
+const themeLightBtn       = document.getElementById("theme-light");
+const themeDarkBtn        = document.getElementById("theme-dark");
+const streamingToggle     = document.getElementById("streaming-toggle");
+const conversationToggle  = document.getElementById("conversation-toggle");
+const newChatBtn          = document.getElementById("new-chat-btn");
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PERSONA_META = {
@@ -60,18 +62,23 @@ const DEFAULT_MODEL   = "claude-sonnet-4-6";
 const DEFAULT_THEME   = "light";
 
 // ── State (loaded from localStorage) ─────────────────────────────────────────
-let currentPersona   = localStorage.getItem("molly-persona")   || DEFAULT_PERSONA;
-let currentModel     = localStorage.getItem("molly-model")     || DEFAULT_MODEL;
-let currentTheme     = localStorage.getItem("molly-theme")     || DEFAULT_THEME;
-let streamingEnabled = localStorage.getItem("molly-streaming") === "true";
+let currentPersona        = localStorage.getItem("molly-persona")      || DEFAULT_PERSONA;
+let currentModel          = localStorage.getItem("molly-model")        || DEFAULT_MODEL;
+let currentTheme          = localStorage.getItem("molly-theme")        || DEFAULT_THEME;
+let streamingEnabled      = localStorage.getItem("molly-streaming")    === "true";
+let conversationEnabled   = localStorage.getItem("molly-conversation") === "true";
+
+// ── Conversation history (in-memory only) ─────────────────────────────────────
+let conversationHistory = [];
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function init() {
   applyTheme(currentTheme);
   buildPersonaList();
-  applyPersona(currentPersona);  // also applies that persona's accent
+  applyPersona(currentPersona);
   applyModel(currentModel);
   applyStreaming(streamingEnabled);
+  applyConversation(conversationEnabled);
 })();
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -120,6 +127,35 @@ function applyStreaming(enabled) {
   streamingToggle.classList.toggle("active", enabled);
 }
 
+// ── Conversation toggle ───────────────────────────────────────────────────────
+conversationToggle.addEventListener("click", () => {
+  conversationEnabled = !conversationEnabled;
+  localStorage.setItem("molly-conversation", conversationEnabled);
+  if (!conversationEnabled) clearHistory();
+  applyConversation(conversationEnabled);
+});
+
+newChatBtn.addEventListener("click", () => {
+  clearHistory();
+  clearChatUI();
+});
+
+function applyConversation(enabled) {
+  conversationToggle.setAttribute("aria-checked", enabled ? "true" : "false");
+  conversationToggle.classList.toggle("active", enabled);
+  newChatBtn.hidden = !enabled;
+}
+
+function clearHistory() {
+  conversationHistory = [];
+}
+
+function clearChatUI() {
+  chatMessages.innerHTML = "";
+  chatMessages.appendChild(emptyState);
+  emptyState.style.display = "";
+}
+
 // ── Persona ───────────────────────────────────────────────────────────────────
 function buildPersonaList() {
   personaListEl.innerHTML = "";
@@ -144,7 +180,6 @@ function selectPersona(key) {
 
 function applyPersona(key) {
   const meta = PERSONA_META[key] || PERSONA_META[DEFAULT_PERSONA];
-  // Apply this persona's dedicated accent colour
   document.documentElement.dataset.accent = meta.accent;
   activePersonaBadge.textContent  = meta.label;
   emptySub.textContent            = meta.desc;
@@ -192,6 +227,14 @@ async function askQuestion() {
   questionEl.style.height = "auto";
   setLoading(true);
 
+  // Build the messages array for this request
+  if (conversationEnabled) {
+    conversationHistory.push({ role: "user", content: question });
+  }
+  const messages = conversationEnabled
+    ? [...conversationHistory]
+    : [{ role: "user", content: question }];
+
   const pair        = document.createElement("div");
   pair.className    = "message-pair";
   const assistantEl = buildAssistantShell(currentPersona, currentModel);
@@ -203,22 +246,29 @@ async function askQuestion() {
   chatMessages.appendChild(pair);
   scrollToBottom();
 
+  let assistantReply = "";
+
   if (streamingEnabled) {
-    await askStreaming(question, bodyEl, thinkingEl);
+    assistantReply = await askStreaming(messages, bodyEl, thinkingEl);
   } else {
-    await askBatch(question, bodyEl, thinkingEl);
+    assistantReply = await askBatch(messages, bodyEl, thinkingEl);
+  }
+
+  // Record the assistant turn so future messages carry the full thread
+  if (conversationEnabled && assistantReply) {
+    conversationHistory.push({ role: "assistant", content: assistantReply });
   }
 
   setLoading(false);
   scrollToBottom();
 }
 
-async function askBatch(question, bodyEl, thinkingEl) {
+async function askBatch(messages, bodyEl, thinkingEl) {
   try {
     const res  = await fetch("/api/ask", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ question, persona: currentPersona, model: currentModel }),
+      body:    JSON.stringify({ messages, persona: currentPersona, model: currentModel }),
     });
 
     const data = await res.json();
@@ -228,11 +278,14 @@ async function askBatch(question, bodyEl, thinkingEl) {
     if (!res.ok) {
       contentEl.className   = "error-bubble";
       contentEl.textContent = data.error ?? "An unknown error occurred.";
-    } else {
-      contentEl.className = "answer";
-      contentEl.innerHTML = marked.parse(data.answer);
+      bodyEl.appendChild(contentEl);
+      return "";
     }
+
+    contentEl.className = "answer";
+    contentEl.innerHTML = marked.parse(data.answer);
     bodyEl.appendChild(contentEl);
+    return data.answer;
   } catch {
     thinkingEl.remove();
     const errEl = Object.assign(document.createElement("div"), {
@@ -240,10 +293,11 @@ async function askBatch(question, bodyEl, thinkingEl) {
       textContent: "Network error — could not reach the server.",
     });
     bodyEl.appendChild(errEl);
+    return "";
   }
 }
 
-async function askStreaming(question, bodyEl, thinkingEl) {
+async function askStreaming(messages, bodyEl, thinkingEl) {
   const contentEl = document.createElement("div");
   contentEl.className = "answer streaming";
   const cursorEl = document.createElement("span");
@@ -255,7 +309,7 @@ async function askStreaming(question, bodyEl, thinkingEl) {
     const res = await fetch("/api/ask-stream", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ question, persona: currentPersona, model: currentModel }),
+      body:    JSON.stringify({ messages, persona: currentPersona, model: currentModel }),
     });
 
     if (!res.ok) {
@@ -265,7 +319,7 @@ async function askStreaming(question, bodyEl, thinkingEl) {
         textContent: "Stream error — could not reach the server.",
       });
       bodyEl.appendChild(errEl);
-      return;
+      return "";
     }
 
     const reader  = res.body.getReader();
@@ -292,14 +346,12 @@ async function askStreaming(question, bodyEl, thinkingEl) {
             firstChunk = false;
           }
           rawText += payload.text;
-          // Append only the new text — no full re-render
           const chunk = document.createElement("span");
           chunk.className = "chunk-token";
           chunk.textContent = payload.text;
           contentEl.insertBefore(chunk, cursorEl);
           scrollToBottom();
         } else if (payload.type === "done") {
-          // One final markdown render when the stream closes
           cursorEl.remove();
           contentEl.classList.remove("streaming");
           contentEl.innerHTML = marked.parse(rawText);
@@ -311,6 +363,7 @@ async function askStreaming(question, bodyEl, thinkingEl) {
             textContent: payload.message,
           });
           bodyEl.appendChild(errEl);
+          return "";
         }
       }
     }
@@ -328,7 +381,10 @@ async function askStreaming(question, bodyEl, thinkingEl) {
       textContent: "Network error — could not reach the server.",
     });
     bodyEl.appendChild(errEl);
+    return "";
   }
+
+  return rawText;
 }
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────
