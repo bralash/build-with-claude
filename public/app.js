@@ -18,6 +18,18 @@ const conversationToggle  = document.getElementById("conversation-toggle");
 const newChatBtn          = document.getElementById("new-chat-btn");
 const conversationListEl  = document.getElementById("conversation-list");
 
+// ── Info panel refs ───────────────────────────────────────────────────────────
+const infoMsgCount        = document.getElementById("info-msg-count");
+const infoTokensIn        = document.getElementById("info-tokens-in");
+const infoTokensOut       = document.getElementById("info-tokens-out");
+const infoTokensTotal     = document.getElementById("info-tokens-total");
+const infoLastTurnSection = document.getElementById("info-last-turn-section");
+const infoLastIn          = document.getElementById("info-last-in");
+const infoLastOut         = document.getElementById("info-last-out");
+const infoModel           = document.getElementById("info-model");
+const infoPersona         = document.getElementById("info-persona");
+const infoMemory          = document.getElementById("info-memory");
+
 // ── Config ────────────────────────────────────────────────────────────────────
 const PERSONA_META = {
   casual: {
@@ -69,6 +81,9 @@ let currentModel        = localStorage.getItem("molly-model")        || DEFAULT_
 let currentTheme        = localStorage.getItem("molly-theme")        || DEFAULT_THEME;
 let streamingEnabled    = localStorage.getItem("molly-streaming")    === "true";
 let conversationEnabled = localStorage.getItem("molly-conversation") === "true";
+
+// ── Token tracking (session, not persisted) ───────────────────────────────────
+let convTokens = { input: 0, output: 0 };
 
 // ── Conversation store ────────────────────────────────────────────────────────
 // Each conversation: { id, title, messages: [{role, content}], updatedAt }
@@ -130,6 +145,7 @@ function appendToActiveConversation(role, content) {
   applyConversation(conversationEnabled);
   renderSidebar();
   if (activeConvId) renderConversationInUI(getActiveConversation());
+  updateInfoPanel();
 })();
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -164,8 +180,10 @@ function switchConversation(id) {
   if (id === activeConvId) return;
   activeConvId = id;
   localStorage.setItem("molly-active-conv", id);
+  convTokens = { input: 0, output: 0 };
   renderSidebar();
   renderConversationInUI(getActiveConversation());
+  updateInfoPanel();
 }
 
 function renderConversationInUI(conv) {
@@ -221,11 +239,13 @@ newChatBtn.addEventListener("click", startNewChat);
 
 function startNewChat() {
   activeConvId = null;
+  convTokens = { input: 0, output: 0 };
   localStorage.removeItem("molly-active-conv");
   renderSidebar();
   chatMessages.innerHTML = "";
   chatMessages.appendChild(emptyState);
   emptyState.style.display = "";
+  updateInfoPanel();
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -284,6 +304,39 @@ conversationToggle.addEventListener("click", () => {
 function applyConversation(enabled) {
   conversationToggle.setAttribute("aria-checked", enabled ? "true" : "false");
   conversationToggle.classList.toggle("active", enabled);
+  updateInfoPanel();
+}
+
+// ── Info panel ────────────────────────────────────────────────────────────────
+function fmt(n) { return n.toLocaleString(); }
+
+function updateInfoPanel(lastTurn) {
+  const conv     = getActiveConversation();
+  const msgCount = conv ? conv.messages.length : 0;
+  const totalIn  = convTokens.input;
+  const totalOut = convTokens.output;
+
+  infoMsgCount.textContent    = msgCount > 0 ? fmt(msgCount) : "—";
+  infoTokensIn.textContent    = totalIn  > 0 ? fmt(totalIn)  : "—";
+  infoTokensOut.textContent   = totalOut > 0 ? fmt(totalOut) : "—";
+  infoTokensTotal.textContent = (totalIn + totalOut) > 0
+    ? fmt(totalIn + totalOut) : "—";
+
+  if (lastTurn) {
+    infoLastTurnSection.hidden = false;
+    infoLastIn.textContent  = fmt(lastTurn.input_tokens);
+    infoLastOut.textContent = fmt(lastTurn.output_tokens);
+  }
+
+  const modelMeta = MODEL_META[currentModel] || { label: currentModel };
+  infoModel.textContent = modelMeta.label;
+
+  const personaMeta = PERSONA_META[currentPersona] || { label: currentPersona };
+  infoPersona.textContent = personaMeta.label;
+
+  infoMemory.innerHTML = conversationEnabled
+    ? '<span class="info-badge on">On</span>'
+    : '<span class="info-badge">Off</span>';
 }
 
 // ── Persona ───────────────────────────────────────────────────────────────────
@@ -314,6 +367,7 @@ function applyPersona(key) {
   activePersonaBadge.textContent  = meta.label;
   emptySub.textContent            = meta.desc;
   questionEl.placeholder          = meta.placeholder;
+  updateInfoPanel();
 }
 
 // ── Model selector ────────────────────────────────────────────────────────────
@@ -332,6 +386,7 @@ function applyModel(modelId) {
   modelChipsEl.querySelectorAll(".model-chip").forEach((chip) => {
     chip.classList.toggle("active", chip.dataset.model === modelId);
   });
+  updateInfoPanel();
 }
 
 // ── Textarea auto-grow ────────────────────────────────────────────────────────
@@ -417,6 +472,12 @@ async function askBatch(messages, bodyEl, thinkingEl) {
     contentEl.className = "answer";
     contentEl.innerHTML = marked.parse(data.answer);
     bodyEl.appendChild(contentEl);
+
+    if (data.usage) {
+      convTokens.input  += data.usage.input_tokens;
+      convTokens.output += data.usage.output_tokens;
+      updateInfoPanel(data.usage);
+    }
     return data.answer;
   } catch {
     thinkingEl.remove();
@@ -485,6 +546,11 @@ async function askStreaming(messages, bodyEl, thinkingEl) {
           cursorEl.remove();
           contentEl.classList.remove("streaming");
           contentEl.innerHTML = marked.parse(rawText);
+          if (payload.usage) {
+            convTokens.input  += payload.usage.input_tokens;
+            convTokens.output += payload.usage.output_tokens;
+            updateInfoPanel(payload.usage);
+          }
         } else if (payload.type === "error") {
           thinkingEl.remove();
           cursorEl.remove();

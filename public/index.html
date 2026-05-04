@@ -84,10 +84,67 @@
             </div>
           </div>
 
-          <p class="input-hint"><kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for new line</p>
+
         </footer>
 
       </div><!-- /.main -->
+
+      <!-- ── Info panel ──────────────────────────────────────────────────────── -->
+      <aside class="info-panel" id="info-panel">
+        <div class="info-panel-header">About this chat</div>
+        <div class="info-panel-body">
+
+          <section class="info-section">
+            <div class="info-label">Messages</div>
+            <div class="info-value" id="info-msg-count">—</div>
+          </section>
+
+          <section class="info-section">
+            <div class="info-label">Tokens used</div>
+            <div class="info-stat-row">
+              <span class="info-stat-label">Input</span>
+              <span class="info-stat-value" id="info-tokens-in">—</span>
+            </div>
+            <div class="info-stat-row">
+              <span class="info-stat-label">Output</span>
+              <span class="info-stat-value" id="info-tokens-out">—</span>
+            </div>
+            <div class="info-stat-row info-stat-total">
+              <span class="info-stat-label">Total</span>
+              <span class="info-stat-value" id="info-tokens-total">—</span>
+            </div>
+          </section>
+
+          <section class="info-section" id="info-last-turn-section" hidden>
+            <div class="info-label">Last turn</div>
+            <div class="info-stat-row">
+              <span class="info-stat-label">Input</span>
+              <span class="info-stat-value" id="info-last-in">—</span>
+            </div>
+            <div class="info-stat-row">
+              <span class="info-stat-label">Output</span>
+              <span class="info-stat-value" id="info-last-out">—</span>
+            </div>
+          </section>
+
+          <section class="info-section">
+            <div class="info-label">Model</div>
+            <div class="info-value" id="info-model">—</div>
+          </section>
+
+          <section class="info-section">
+            <div class="info-label">Persona</div>
+            <div class="info-value" id="info-persona">—</div>
+          </section>
+
+          <section class="info-section">
+            <div class="info-label">Memory</div>
+            <div class="info-value" id="info-memory">—</div>
+          </section>
+
+        </div>
+      </aside>
+
     </div><!-- /.app -->
 
     <!-- Settings overlay + panel -->
