@@ -21,6 +21,13 @@
         </div>
         <div class="topbar-actions">
           <span class="active-persona-badge" id="active-persona-badge"></span>
+          <button class="icon-btn new-chat-btn" id="new-chat-btn" aria-label="New conversation" title="New conversation" hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
           <button class="icon-btn" id="settings-open" aria-label="Open settings" title="Settings">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -109,6 +116,21 @@
             </button>
             <button class="mode-btn" data-theme-val="dark" id="theme-dark">
               <span class="mode-icon">☽</span> Dark
+            </button>
+          </div>
+        </section>
+
+        <!-- Conversation memory -->
+        <section class="settings-section">
+          <div class="settings-row-between">
+            <div>
+              <div class="settings-section-title">Conversation memory</div>
+              <div class="settings-section-desc">
+                Remember previous messages so Molly can follow the thread.
+              </div>
+            </div>
+            <button class="toggle-switch" id="conversation-toggle" aria-checked="false" role="switch">
+              <span class="toggle-thumb"></span>
             </button>
           </div>
         </section>

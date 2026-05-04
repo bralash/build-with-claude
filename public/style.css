@@ -198,6 +198,9 @@ body {
   color: var(--text-primary);
 }
 
+.new-chat-btn { color: var(--accent-fg); border-color: var(--accent-border); }
+.new-chat-btn:hover { background: var(--accent-subtle); color: var(--accent-fg); }
+
 /* ── Chat thread ────────────────────────────────────────────────────────────── */
 #chat-messages {
   flex: 1;

@@ -49,6 +49,8 @@ Be encouraging and empowering. Your goal is not to show what you know, \
 but to help the person in front of you grow.`,
 };
 
+type Message = { role: "user" | "assistant"; content: string };
+
 const ALLOWED_MODELS = [
   "claude-haiku-4-5",
   "claude-sonnet-4-6",
@@ -58,17 +60,23 @@ const ALLOWED_MODELS = [
 type AllowedModel = (typeof ALLOWED_MODELS)[number];
 const DEFAULT_MODEL: AllowedModel = "claude-sonnet-4-6";
 
+function resolveMessages(body: {
+  question?: string;
+  messages?: Message[];
+}): Message[] | null {
+  if (body.messages && body.messages.length > 0) return body.messages;
+  if (body.question?.trim()) return [{ role: "user", content: body.question.trim() }];
+  return null;
+}
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.post("/api/ask", async (req: Request, res: Response): Promise<void> => {
-  const { question, persona, model } = req.body as {
-    question?: string;
-    persona?: string;
-    model?: string;
-  };
+  const { persona, model } = req.body as { persona?: string; model?: string };
+  const messages = resolveMessages(req.body);
 
-  if (!question || question.trim() === "") {
+  if (!messages) {
     res.status(400).json({ error: "Question is required." });
     return;
   }
@@ -83,7 +91,7 @@ app.post("/api/ask", async (req: Request, res: Response): Promise<void> => {
       model: selectedModel,
       max_tokens: 1024,
       system: systemPrompt,
-      messages: [{ role: "user", content: question.trim() }],
+      messages,
     });
 
     const textBlock = message.content.find((block) => block.type === "text");
@@ -115,13 +123,10 @@ app.post("/api/ask", async (req: Request, res: Response): Promise<void> => {
 });
 
 app.post("/api/ask-stream", async (req: Request, res: Response): Promise<void> => {
-  const { question, persona, model } = req.body as {
-    question?: string;
-    persona?: string;
-    model?: string;
-  };
+  const { persona, model } = req.body as { persona?: string; model?: string };
+  const messages = resolveMessages(req.body);
 
-  if (!question || question.trim() === "") {
+  if (!messages) {
     res.status(400).json({ error: "Question is required." });
     return;
   }
@@ -140,7 +145,7 @@ app.post("/api/ask-stream", async (req: Request, res: Response): Promise<void> =
       model: selectedModel,
       max_tokens: 1024,
       system: systemPrompt,
-      messages: [{ role: "user", content: question.trim() }],
+      messages,
     });
 
     for await (const event of stream) {
