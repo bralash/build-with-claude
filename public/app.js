@@ -82,7 +82,7 @@ let currentTheme        = localStorage.getItem("molly-theme")        || DEFAULT_
 let streamingEnabled    = localStorage.getItem("molly-streaming")    === "true";
 let conversationEnabled = localStorage.getItem("molly-conversation") === "true";
 
-// ── Token tracking (session, not persisted) ───────────────────────────────────
+// ── Token tracking (synced with active conversation's stored tokens) ──────────
 let convTokens = { input: 0, output: 0 };
 
 // ── Conversation store ────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ function createConversation(firstMessage) {
   const title = firstMessage.length > 45
     ? firstMessage.slice(0, 45).trimEnd() + "…"
     : firstMessage;
-  const conv = { id, title, messages: [], updatedAt: Date.now() };
+  const conv = { id, title, messages: [], tokens: { input: 0, output: 0 }, updatedAt: Date.now() };
   conversations.unshift(conv);          // newest first
   if (conversations.length > MAX_CONVERSATIONS) conversations.pop();
   activeConvId = id;
@@ -134,9 +134,27 @@ function appendToActiveConversation(role, content) {
   saveConversations();
 }
 
+function persistTokens(usage) {
+  convTokens.input  += usage.input_tokens;
+  convTokens.output += usage.output_tokens;
+  const conv = getActiveConversation();
+  if (conv) {
+    if (!conv.tokens) conv.tokens = { input: 0, output: 0 };
+    conv.tokens.input  = convTokens.input;
+    conv.tokens.output = convTokens.output;
+    saveConversations();
+  }
+  updateInfoPanel(usage);
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function init() {
   loadConversations();
+  // Restore token counts from the active conversation (if any)
+  const activeAtBoot = getActiveConversation();
+  if (activeAtBoot?.tokens) {
+    convTokens = { input: activeAtBoot.tokens.input, output: activeAtBoot.tokens.output };
+  }
   applyTheme(currentTheme);
   buildPersonaList();
   applyPersona(currentPersona);
@@ -170,19 +188,70 @@ function renderSidebar() {
     title.className = "conv-item-title";
     title.textContent = conv.title;
 
+    const delBtn = document.createElement("button");
+    delBtn.className = "conv-delete-btn";
+    delBtn.setAttribute("aria-label", "Delete conversation");
+    delBtn.setAttribute("title", "Delete");
+    delBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" stroke-width="2.2"
+      stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6"/><path d="M14 11v6"/>
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>`;
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteConversation(conv.id);
+    });
+
     btn.appendChild(title);
+    btn.appendChild(delBtn);
     btn.addEventListener("click", () => switchConversation(conv.id));
     conversationListEl.appendChild(btn);
   });
+}
+
+function deleteConversation(id) {
+  const idx = conversations.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  conversations.splice(idx, 1);
+
+  if (id === activeConvId) {
+    // Switch to the next available conversation, or blank state
+    const next = conversations[idx] || conversations[idx - 1] || null;
+    if (next) {
+      activeConvId = next.id;
+      localStorage.setItem("molly-active-conv", next.id);
+      convTokens = next.tokens
+        ? { input: next.tokens.input, output: next.tokens.output }
+        : { input: 0, output: 0 };
+      renderConversationInUI(next);
+    } else {
+      activeConvId = null;
+      convTokens = { input: 0, output: 0 };
+      localStorage.removeItem("molly-active-conv");
+      chatMessages.innerHTML = "";
+      chatMessages.appendChild(emptyState);
+      emptyState.style.display = "";
+    }
+  }
+
+  saveConversations();
+  renderSidebar();
+  updateInfoPanel();
 }
 
 function switchConversation(id) {
   if (id === activeConvId) return;
   activeConvId = id;
   localStorage.setItem("molly-active-conv", id);
-  convTokens = { input: 0, output: 0 };
+  // Restore this conversation's persisted token totals
+  const conv = getActiveConversation();
+  convTokens = conv?.tokens
+    ? { input: conv.tokens.input, output: conv.tokens.output }
+    : { input: 0, output: 0 };
   renderSidebar();
-  renderConversationInUI(getActiveConversation());
+  renderConversationInUI(conv);
   updateInfoPanel();
 }
 
@@ -473,11 +542,7 @@ async function askBatch(messages, bodyEl, thinkingEl) {
     contentEl.innerHTML = marked.parse(data.answer);
     bodyEl.appendChild(contentEl);
 
-    if (data.usage) {
-      convTokens.input  += data.usage.input_tokens;
-      convTokens.output += data.usage.output_tokens;
-      updateInfoPanel(data.usage);
-    }
+    if (data.usage) persistTokens(data.usage);
     return data.answer;
   } catch {
     thinkingEl.remove();
@@ -546,11 +611,7 @@ async function askStreaming(messages, bodyEl, thinkingEl) {
           cursorEl.remove();
           contentEl.classList.remove("streaming");
           contentEl.innerHTML = marked.parse(rawText);
-          if (payload.usage) {
-            convTokens.input  += payload.usage.input_tokens;
-            convTokens.output += payload.usage.output_tokens;
-            updateInfoPanel(payload.usage);
-          }
+          if (payload.usage) persistTokens(payload.usage);
         } else if (payload.type === "error") {
           thinkingEl.remove();
           cursorEl.remove();
