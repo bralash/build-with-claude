@@ -16,6 +16,19 @@ const themeDarkBtn        = document.getElementById("theme-dark");
 const streamingToggle     = document.getElementById("streaming-toggle");
 const conversationToggle  = document.getElementById("conversation-toggle");
 const newChatBtn          = document.getElementById("new-chat-btn");
+const conversationListEl  = document.getElementById("conversation-list");
+
+// ── Info panel refs ───────────────────────────────────────────────────────────
+const infoMsgCount        = document.getElementById("info-msg-count");
+const infoTokensIn        = document.getElementById("info-tokens-in");
+const infoTokensOut       = document.getElementById("info-tokens-out");
+const infoTokensTotal     = document.getElementById("info-tokens-total");
+const infoLastTurnSection = document.getElementById("info-last-turn-section");
+const infoLastIn          = document.getElementById("info-last-in");
+const infoLastOut         = document.getElementById("info-last-out");
+const infoModel           = document.getElementById("info-model");
+const infoPersona         = document.getElementById("info-persona");
+const infoMemory          = document.getElementById("info-memory");
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const PERSONA_META = {
@@ -60,26 +73,180 @@ const MODEL_META = {
 const DEFAULT_PERSONA = "casual";
 const DEFAULT_MODEL   = "claude-sonnet-4-6";
 const DEFAULT_THEME   = "light";
+const MAX_CONVERSATIONS = 50;
 
-// ── State (loaded from localStorage) ─────────────────────────────────────────
-let currentPersona        = localStorage.getItem("molly-persona")      || DEFAULT_PERSONA;
-let currentModel          = localStorage.getItem("molly-model")        || DEFAULT_MODEL;
-let currentTheme          = localStorage.getItem("molly-theme")        || DEFAULT_THEME;
-let streamingEnabled      = localStorage.getItem("molly-streaming")    === "true";
-let conversationEnabled   = localStorage.getItem("molly-conversation") === "true";
+// ── Preferences (localStorage) ────────────────────────────────────────────────
+let currentPersona      = localStorage.getItem("molly-persona")      || DEFAULT_PERSONA;
+let currentModel        = localStorage.getItem("molly-model")        || DEFAULT_MODEL;
+let currentTheme        = localStorage.getItem("molly-theme")        || DEFAULT_THEME;
+let streamingEnabled    = localStorage.getItem("molly-streaming")    === "true";
+let conversationEnabled = localStorage.getItem("molly-conversation") === "true";
 
-// ── Conversation history (in-memory only) ─────────────────────────────────────
-let conversationHistory = [];
+// ── Token tracking (session, not persisted) ───────────────────────────────────
+let convTokens = { input: 0, output: 0 };
+
+// ── Conversation store ────────────────────────────────────────────────────────
+// Each conversation: { id, title, messages: [{role, content}], updatedAt }
+let conversations   = [];
+let activeConvId    = null;
+
+function loadConversations() {
+  try {
+    conversations = JSON.parse(localStorage.getItem("molly-conversations") || "[]");
+  } catch {
+    conversations = [];
+  }
+  activeConvId = localStorage.getItem("molly-active-conv") || null;
+  // Validate the active id still exists
+  if (activeConvId && !conversations.find(c => c.id === activeConvId)) {
+    activeConvId = conversations[0]?.id || null;
+  }
+}
+
+function saveConversations() {
+  localStorage.setItem("molly-conversations", JSON.stringify(conversations));
+  if (activeConvId) localStorage.setItem("molly-active-conv", activeConvId);
+  else localStorage.removeItem("molly-active-conv");
+}
+
+function getActiveConversation() {
+  return conversations.find(c => c.id === activeConvId) || null;
+}
+
+function createConversation(firstMessage) {
+  const id = "conv_" + Date.now();
+  const title = firstMessage.length > 45
+    ? firstMessage.slice(0, 45).trimEnd() + "…"
+    : firstMessage;
+  const conv = { id, title, messages: [], updatedAt: Date.now() };
+  conversations.unshift(conv);          // newest first
+  if (conversations.length > MAX_CONVERSATIONS) conversations.pop();
+  activeConvId = id;
+  saveConversations();
+  return conv;
+}
+
+function appendToActiveConversation(role, content) {
+  const conv = getActiveConversation();
+  if (!conv) return;
+  conv.messages.push({ role, content });
+  conv.updatedAt = Date.now();
+  saveConversations();
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function init() {
+  loadConversations();
   applyTheme(currentTheme);
   buildPersonaList();
   applyPersona(currentPersona);
   applyModel(currentModel);
   applyStreaming(streamingEnabled);
   applyConversation(conversationEnabled);
+  renderSidebar();
+  if (activeConvId) renderConversationInUI(getActiveConversation());
+  updateInfoPanel();
 })();
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  conversationListEl.innerHTML = "";
+
+  if (conversations.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "conv-empty";
+    empty.textContent = "No conversations yet.\nStart chatting!";
+    conversationListEl.appendChild(empty);
+    return;
+  }
+
+  conversations.forEach(conv => {
+    const btn = document.createElement("button");
+    btn.className = "conv-item" + (conv.id === activeConvId ? " active" : "");
+    btn.setAttribute("data-id", conv.id);
+    btn.setAttribute("title", conv.title);
+
+    const title = document.createElement("span");
+    title.className = "conv-item-title";
+    title.textContent = conv.title;
+
+    btn.appendChild(title);
+    btn.addEventListener("click", () => switchConversation(conv.id));
+    conversationListEl.appendChild(btn);
+  });
+}
+
+function switchConversation(id) {
+  if (id === activeConvId) return;
+  activeConvId = id;
+  localStorage.setItem("molly-active-conv", id);
+  convTokens = { input: 0, output: 0 };
+  renderSidebar();
+  renderConversationInUI(getActiveConversation());
+  updateInfoPanel();
+}
+
+function renderConversationInUI(conv) {
+  // Clear chat area
+  chatMessages.innerHTML = "";
+
+  if (!conv || conv.messages.length === 0) {
+    chatMessages.appendChild(emptyState);
+    emptyState.style.display = "";
+    return;
+  }
+
+  emptyState.style.display = "none";
+
+  // Pair up user + assistant messages and render them
+  let i = 0;
+  while (i < conv.messages.length) {
+    const pair = document.createElement("div");
+    pair.className = "message-pair";
+
+    // User turn
+    if (conv.messages[i]?.role === "user") {
+      const userDiv  = document.createElement("div");
+      userDiv.className = "user-message";
+      const bubble = document.createElement("div");
+      bubble.className   = "user-bubble";
+      bubble.textContent = conv.messages[i].content;
+      userDiv.appendChild(bubble);
+      pair.appendChild(userDiv);
+      i++;
+    }
+
+    // Assistant turn (may not exist for the last in-progress turn)
+    if (i < conv.messages.length && conv.messages[i]?.role === "assistant") {
+      const shell  = buildAssistantShell(currentPersona, currentModel);
+      const bodyEl = shell.querySelector(".assistant-body");
+      const answerEl = document.createElement("div");
+      answerEl.className = "answer";
+      answerEl.innerHTML = marked.parse(conv.messages[i].content);
+      bodyEl.appendChild(answerEl);
+      pair.appendChild(shell);
+      i++;
+    }
+
+    chatMessages.appendChild(pair);
+  }
+
+  scrollToBottom();
+}
+
+// ── New chat ──────────────────────────────────────────────────────────────────
+newChatBtn.addEventListener("click", startNewChat);
+
+function startNewChat() {
+  activeConvId = null;
+  convTokens = { input: 0, output: 0 };
+  localStorage.removeItem("molly-active-conv");
+  renderSidebar();
+  chatMessages.innerHTML = "";
+  chatMessages.appendChild(emptyState);
+  emptyState.style.display = "";
+  updateInfoPanel();
+}
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 settingsOpenBtn.addEventListener("click", openSettings);
@@ -127,33 +294,49 @@ function applyStreaming(enabled) {
   streamingToggle.classList.toggle("active", enabled);
 }
 
-// ── Conversation toggle ───────────────────────────────────────────────────────
+// ── Conversation memory toggle ────────────────────────────────────────────────
 conversationToggle.addEventListener("click", () => {
   conversationEnabled = !conversationEnabled;
   localStorage.setItem("molly-conversation", conversationEnabled);
-  if (!conversationEnabled) clearHistory();
   applyConversation(conversationEnabled);
-});
-
-newChatBtn.addEventListener("click", () => {
-  clearHistory();
-  clearChatUI();
 });
 
 function applyConversation(enabled) {
   conversationToggle.setAttribute("aria-checked", enabled ? "true" : "false");
   conversationToggle.classList.toggle("active", enabled);
-  newChatBtn.hidden = !enabled;
+  updateInfoPanel();
 }
 
-function clearHistory() {
-  conversationHistory = [];
-}
+// ── Info panel ────────────────────────────────────────────────────────────────
+function fmt(n) { return n.toLocaleString(); }
 
-function clearChatUI() {
-  chatMessages.innerHTML = "";
-  chatMessages.appendChild(emptyState);
-  emptyState.style.display = "";
+function updateInfoPanel(lastTurn) {
+  const conv     = getActiveConversation();
+  const msgCount = conv ? conv.messages.length : 0;
+  const totalIn  = convTokens.input;
+  const totalOut = convTokens.output;
+
+  infoMsgCount.textContent    = msgCount > 0 ? fmt(msgCount) : "—";
+  infoTokensIn.textContent    = totalIn  > 0 ? fmt(totalIn)  : "—";
+  infoTokensOut.textContent   = totalOut > 0 ? fmt(totalOut) : "—";
+  infoTokensTotal.textContent = (totalIn + totalOut) > 0
+    ? fmt(totalIn + totalOut) : "—";
+
+  if (lastTurn) {
+    infoLastTurnSection.hidden = false;
+    infoLastIn.textContent  = fmt(lastTurn.input_tokens);
+    infoLastOut.textContent = fmt(lastTurn.output_tokens);
+  }
+
+  const modelMeta = MODEL_META[currentModel] || { label: currentModel };
+  infoModel.textContent = modelMeta.label;
+
+  const personaMeta = PERSONA_META[currentPersona] || { label: currentPersona };
+  infoPersona.textContent = personaMeta.label;
+
+  infoMemory.innerHTML = conversationEnabled
+    ? '<span class="info-badge on">On</span>'
+    : '<span class="info-badge">Off</span>';
 }
 
 // ── Persona ───────────────────────────────────────────────────────────────────
@@ -184,6 +367,7 @@ function applyPersona(key) {
   activePersonaBadge.textContent  = meta.label;
   emptySub.textContent            = meta.desc;
   questionEl.placeholder          = meta.placeholder;
+  updateInfoPanel();
 }
 
 // ── Model selector ────────────────────────────────────────────────────────────
@@ -202,6 +386,7 @@ function applyModel(modelId) {
   modelChipsEl.querySelectorAll(".model-chip").forEach((chip) => {
     chip.classList.toggle("active", chip.dataset.model === modelId);
   });
+  updateInfoPanel();
 }
 
 // ── Textarea auto-grow ────────────────────────────────────────────────────────
@@ -221,19 +406,22 @@ async function askQuestion() {
   const question = questionEl.value.trim();
   if (!question) return;
 
+  // Create a new conversation on the first message of a session
+  if (!activeConvId) createConversation(question);
+  appendToActiveConversation("user", question);
+  renderSidebar();
+
   emptyState.style.display = "none";
   appendUserMessage(question);
   questionEl.value = "";
   questionEl.style.height = "auto";
   setLoading(true);
 
-  // Build the messages array for this request
-  if (conversationEnabled) {
-    conversationHistory.push({ role: "user", content: question });
-  }
+  // Build messages array for the API call
+  const conv = getActiveConversation();
   const messages = conversationEnabled
-    ? [...conversationHistory]
-    : [{ role: "user", content: question }];
+    ? conv.messages.slice()               // full history
+    : [{ role: "user", content: question }]; // stateless
 
   const pair        = document.createElement("div");
   pair.className    = "message-pair";
@@ -247,16 +435,15 @@ async function askQuestion() {
   scrollToBottom();
 
   let assistantReply = "";
-
   if (streamingEnabled) {
     assistantReply = await askStreaming(messages, bodyEl, thinkingEl);
   } else {
     assistantReply = await askBatch(messages, bodyEl, thinkingEl);
   }
 
-  // Record the assistant turn so future messages carry the full thread
-  if (conversationEnabled && assistantReply) {
-    conversationHistory.push({ role: "assistant", content: assistantReply });
+  // Persist the assistant reply to the conversation store
+  if (assistantReply) {
+    appendToActiveConversation("assistant", assistantReply);
   }
 
   setLoading(false);
@@ -285,14 +472,19 @@ async function askBatch(messages, bodyEl, thinkingEl) {
     contentEl.className = "answer";
     contentEl.innerHTML = marked.parse(data.answer);
     bodyEl.appendChild(contentEl);
+
+    if (data.usage) {
+      convTokens.input  += data.usage.input_tokens;
+      convTokens.output += data.usage.output_tokens;
+      updateInfoPanel(data.usage);
+    }
     return data.answer;
   } catch {
     thinkingEl.remove();
-    const errEl = Object.assign(document.createElement("div"), {
+    bodyEl.appendChild(Object.assign(document.createElement("div"), {
       className: "error-bubble",
       textContent: "Network error — could not reach the server.",
-    });
-    bodyEl.appendChild(errEl);
+    }));
     return "";
   }
 }
@@ -314,11 +506,10 @@ async function askStreaming(messages, bodyEl, thinkingEl) {
 
     if (!res.ok) {
       thinkingEl.remove();
-      const errEl = Object.assign(document.createElement("div"), {
+      bodyEl.appendChild(Object.assign(document.createElement("div"), {
         className: "error-bubble",
         textContent: "Stream error — could not reach the server.",
-      });
-      bodyEl.appendChild(errEl);
+      }));
       return "";
     }
 
@@ -355,20 +546,23 @@ async function askStreaming(messages, bodyEl, thinkingEl) {
           cursorEl.remove();
           contentEl.classList.remove("streaming");
           contentEl.innerHTML = marked.parse(rawText);
+          if (payload.usage) {
+            convTokens.input  += payload.usage.input_tokens;
+            convTokens.output += payload.usage.output_tokens;
+            updateInfoPanel(payload.usage);
+          }
         } else if (payload.type === "error") {
           thinkingEl.remove();
           cursorEl.remove();
-          const errEl = Object.assign(document.createElement("div"), {
+          bodyEl.appendChild(Object.assign(document.createElement("div"), {
             className: "error-bubble",
             textContent: payload.message,
-          });
-          bodyEl.appendChild(errEl);
+          }));
           return "";
         }
       }
     }
 
-    // Fallback: ensure markdown is rendered if done event wasn't received
     if (!firstChunk && contentEl.classList.contains("streaming")) {
       cursorEl.remove();
       contentEl.classList.remove("streaming");
@@ -376,11 +570,10 @@ async function askStreaming(messages, bodyEl, thinkingEl) {
     }
   } catch {
     thinkingEl.remove();
-    const errEl = Object.assign(document.createElement("div"), {
+    bodyEl.appendChild(Object.assign(document.createElement("div"), {
       className: "error-bubble",
       textContent: "Network error — could not reach the server.",
-    });
-    bodyEl.appendChild(errEl);
+    }));
     return "";
   }
 
@@ -404,21 +597,21 @@ function appendUserMessage(text) {
 }
 
 function buildAssistantShell(persona, modelId) {
-  const personaMeta = PERSONA_META[persona]   || PERSONA_META[DEFAULT_PERSONA];
-  const modelMeta   = MODEL_META[modelId]     || MODEL_META[DEFAULT_MODEL];
+  const personaMeta = PERSONA_META[persona] || PERSONA_META[DEFAULT_PERSONA];
+  const modelMeta   = MODEL_META[modelId]   || MODEL_META[DEFAULT_MODEL];
 
-  const wrapper  = document.createElement("div");
+  const wrapper = document.createElement("div");
   wrapper.className = "assistant-message";
 
-  const avatar   = Object.assign(document.createElement("div"), {
-    className: "assistant-avatar",
+  const avatar = Object.assign(document.createElement("div"), {
+    className:   "assistant-avatar",
     textContent: "M",
   });
 
-  const body     = document.createElement("div");
+  const body = document.createElement("div");
   body.className = "assistant-body";
 
-  const header   = document.createElement("div");
+  const header = document.createElement("div");
   header.className = "assistant-header";
   header.innerHTML = `
     <span class="assistant-name">Molly</span>

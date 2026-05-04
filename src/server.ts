@@ -101,6 +101,10 @@ app.post("/api/ask", async (req: Request, res: Response): Promise<void> => {
       answer,
       stop_reason: message.stop_reason,
       model: message.model,
+      usage: {
+        input_tokens:  message.usage.input_tokens,
+        output_tokens: message.usage.output_tokens,
+      },
     });
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
@@ -155,7 +159,15 @@ app.post("/api/ask-stream", async (req: Request, res: Response): Promise<void> =
     }
 
     const final = await stream.finalMessage();
-    res.write(`data: ${JSON.stringify({ type: "done", stop_reason: final.stop_reason, model: final.model })}\n\n`);
+    res.write(`data: ${JSON.stringify({
+      type:       "done",
+      stop_reason: final.stop_reason,
+      model:       final.model,
+      usage: {
+        input_tokens:  final.usage.input_tokens,
+        output_tokens: final.usage.output_tokens,
+      },
+    })}\n\n`);
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
       const status = err.status ?? 500;
