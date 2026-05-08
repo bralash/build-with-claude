@@ -859,18 +859,24 @@ button#ask-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   border-right: 1px solid var(--border-subtle);
 }
 
-/* Persona spans both columns */
-.settings-section.settings-persona {
+/* Persona and Appearance each span both columns (full-width rows) */
+.settings-section.settings-persona,
+.settings-section.settings-appearance {
   grid-column: 1 / -1;
   border-right: none;
 }
 
-/* Right-column sections have no right border */
-.settings-section:nth-child(even):not(.settings-persona) {
+/* Memory and Streaming sit side-by-side — last section in each row has no right border */
+.settings-section:last-child {
   border-right: none;
+  border-bottom: none;
 }
 
-.settings-section:last-child { border-bottom: none; }
+/* The second-to-last section (Memory) also loses its bottom border when it's
+   in the same visual row as the last section (Streaming) */
+.settings-section:nth-last-child(2):not(.settings-persona):not(.settings-appearance) {
+  border-bottom: none;
+}
 
 .settings-section-title {
   font-size: 0.72rem;
