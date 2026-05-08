@@ -177,6 +177,242 @@ app.post("/api/ask-stream", async (req: Request, res: Response): Promise<void> =
   }
 });
 
+// ── Feature 1: Structured JSON Output ────────────────────────────────────────
+// Schema: { title: string, keyPoints: string[], sentiment: "positive"|"neutral"|"negative", confidence: number, isQuestion: boolean }
+const ANALYZE_SCHEMA = `{
+  "title": string,
+  "keyPoints": string[],
+  "sentiment": "positive" | "neutral" | "negative",
+  "confidence": number,
+  "isQuestion": boolean
+}`;
+
+const ANALYZE_SYSTEM_PROMPT = `You are a JSON analysis engine. \
+Analyse the user's input and respond with ONLY a valid JSON object — no preamble, no markdown fences, no explanation. \
+The object must match this exact schema:
+${ANALYZE_SCHEMA}
+
+Rules:
+- title: 3–7 words capturing the essence of the input
+- keyPoints: 2–4 bullet-style strings, each under 15 words
+- sentiment: overall tone of the input
+- confidence: integer 0–100 reflecting how confident you are in the analysis
+- isQuestion: true only if the input is primarily asking something`;
+
+app.post("/api/analyze", async (req: Request, res: Response): Promise<void> => {
+  const { question, model } = req.body as { question?: string; model?: string };
+
+  if (!question?.trim()) {
+    res.status(400).json({ error: "Question is required." });
+    return;
+  }
+
+  const selectedModel = (ALLOWED_MODELS as readonly string[]).includes(model ?? "")
+    ? (model as AllowedModel)
+    : DEFAULT_MODEL;
+
+  try {
+    const message = await client.messages.create({
+      model: selectedModel,
+      max_tokens: 512,
+      system: ANALYZE_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: question.trim() }],
+    });
+
+    const textBlock = message.content.find((block) => block.type === "text");
+    const rawText = textBlock ? textBlock.text.trim() : "";
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      res.status(502).json({ error: "Claude returned invalid JSON. Please try again." });
+      return;
+    }
+
+    res.json({ analysis: parsed, model: message.model });
+  } catch (err) {
+    if (err instanceof Anthropic.APIError) {
+      const status = err.status ?? 500;
+      const userMessage =
+        status === 401 ? "Invalid API key." :
+        status === 429 ? "Rate limit reached. Please wait and try again." :
+        status === 529 ? "Claude is overloaded. Please try again shortly." :
+        `API error (${status}): ${err.message}`;
+      res.status(status >= 500 ? 502 : status).json({ error: userMessage });
+    } else {
+      console.error("Unexpected error:", err);
+      res.status(500).json({ error: "An unexpected error occurred." });
+    }
+  }
+});
+
+// ── Feature 2: Tool Use Loop ──────────────────────────────────────────────────
+// Hardcoded facts dataset for the get_topic_facts tool
+const FACTS_DB: Record<string, string[]> = {
+  javascript: [
+    "JavaScript was created in just 10 days by Brendan Eich in 1995.",
+    "Despite the name, JavaScript has no direct relation to Java.",
+    "JavaScript is the only language that runs natively in all major web browsers.",
+    "JavaScript uses prototype-based inheritance rather than classical inheritance.",
+    "Node.js, released in 2009, brought JavaScript to the server side.",
+  ],
+  python: [
+    "Python was created by Guido van Rossum and first released in 1991.",
+    "Python is named after Monty Python's Flying Circus, not the snake.",
+    "Python uses indentation (whitespace) to define code blocks instead of braces.",
+    "The Zen of Python (PEP 20) outlines 19 guiding principles for the language.",
+    "Python consistently ranks among the top 3 most popular programming languages.",
+  ],
+  typescript: [
+    "TypeScript is a statically typed superset of JavaScript developed by Microsoft.",
+    "TypeScript was first released publicly in October 2012.",
+    "TypeScript code transpiles to plain JavaScript and runs anywhere JavaScript does.",
+    "TypeScript's type system is structural (duck typing), not nominal.",
+    "Anders Hejlsberg, creator of C#, led the design of TypeScript.",
+  ],
+  react: [
+    "React was developed by Jordan Walke at Facebook and released in 2013.",
+    "React introduced a virtual DOM to minimise expensive real DOM updates.",
+    "JSX, React's syntax extension, compiles to plain JavaScript function calls.",
+    "React hooks were introduced in version 16.8 (2019), replacing class lifecycle methods.",
+    "React Native allows React code to compile to native mobile components.",
+  ],
+  claude: [
+    "Claude is an AI assistant made by Anthropic, founded in 2021.",
+    "Claude's name was chosen for its friendly, approachable feel.",
+    "Claude is trained with Constitutional AI (CAI) to be helpful, harmless, and honest.",
+    "The Claude model family includes Haiku, Sonnet, and Opus tiers.",
+    "Claude supports a context window of up to 200,000 tokens in some versions.",
+  ],
+  anthropic: [
+    "Anthropic was founded in 2021 by Dario Amodei, Daniela Amodei, and others.",
+    "Anthropic focuses on AI safety research alongside building AI products.",
+    "Anthropic developed Constitutional AI (CAI) as a safety training technique.",
+    "The company is headquartered in San Francisco.",
+    "Anthropic's research includes work on mechanistic interpretability of neural networks.",
+  ],
+};
+
+function getTopicFacts(topic: string, maxFacts: number): string {
+  const key = topic.toLowerCase().trim();
+  const facts = FACTS_DB[key];
+  if (!facts) {
+    const available = Object.keys(FACTS_DB).join(", ");
+    return `No facts found for "${topic}". Available topics: ${available}.`;
+  }
+  const count = Math.max(1, Math.min(maxFacts, facts.length));
+  return facts.slice(0, count).join("\n");
+}
+
+app.post("/api/tool-ask", async (req: Request, res: Response): Promise<void> => {
+  const { question, model } = req.body as { question?: string; model?: string };
+
+  if (!question?.trim()) {
+    res.status(400).json({ error: "Question is required." });
+    return;
+  }
+
+  const selectedModel = (ALLOWED_MODELS as readonly string[]).includes(model ?? "")
+    ? (model as AllowedModel)
+    : DEFAULT_MODEL;
+
+  // Tool definition
+  const tools: Anthropic.Tool[] = [
+    {
+      name: "get_topic_facts",
+      description: "Retrieves interesting facts about a given technology or AI topic from a curated knowledge base.",
+      input_schema: {
+        type: "object" as const,
+        properties: {
+          topic: {
+            type: "string",
+            description: "The topic to look up (e.g. 'javascript', 'python', 'react', 'claude', 'anthropic').",
+          },
+          max_facts: {
+            type: "number",
+            description: "Maximum number of facts to return (1–5).",
+          },
+        },
+        required: ["topic", "max_facts"],
+      },
+    },
+  ];
+
+  try {
+    // Step 1: Send user message with tool definition in `tools` array
+    const firstResponse = await client.messages.create({
+      model: selectedModel,
+      max_tokens: 1024,
+      system: "You are a helpful assistant. When asked about a topic, use the get_topic_facts tool to retrieve facts before answering.",
+      tools,
+      messages: [{ role: "user", content: question.trim() }],
+    });
+
+    // Step 2: Handle tool_use response block — extract tool name and arguments
+    if (firstResponse.stop_reason !== "tool_use") {
+      // Model answered directly without using the tool
+      const textBlock = firstResponse.content.find((b) => b.type === "text");
+      const answer = textBlock ? (textBlock as Anthropic.TextBlock).text : "No response generated.";
+      res.json({ answer, model: firstResponse.model });
+      return;
+    }
+
+    const toolUseBlock = firstResponse.content.find(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+    );
+    if (!toolUseBlock) {
+      res.status(502).json({ error: "Expected a tool_use block but none was found." });
+      return;
+    }
+
+    const { topic, max_facts } = toolUseBlock.input as { topic: string; max_facts: number };
+
+    // Step 3: Execute the function locally using the extracted arguments
+    const toolResult = getTopicFacts(topic, max_facts);
+
+    // Step 4: Send tool_result back in the next API call, then render final response
+    const secondResponse = await client.messages.create({
+      model: selectedModel,
+      max_tokens: 1024,
+      system: "You are a helpful assistant. When asked about a topic, use the get_topic_facts tool to retrieve facts before answering.",
+      tools,
+      messages: [
+        { role: "user", content: question.trim() },
+        { role: "assistant", content: firstResponse.content },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: toolUseBlock.id,
+              content: toolResult,
+            },
+          ],
+        },
+      ],
+    });
+
+    const finalTextBlock = secondResponse.content.find((b) => b.type === "text");
+    const answer = finalTextBlock ? (finalTextBlock as Anthropic.TextBlock).text : "No response generated.";
+
+    res.json({ answer, model: secondResponse.model, toolUsed: topic });
+  } catch (err) {
+    if (err instanceof Anthropic.APIError) {
+      const status = err.status ?? 500;
+      const userMessage =
+        status === 401 ? "Invalid API key." :
+        status === 429 ? "Rate limit reached. Please wait and try again." :
+        status === 529 ? "Claude is overloaded. Please try again shortly." :
+        `API error (${status}): ${err.message}`;
+      res.status(status >= 500 ? 502 : status).json({ error: userMessage });
+    } else {
+      console.error("Unexpected error:", err);
+      res.status(500).json({ error: "An unexpected error occurred." });
+    }
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
