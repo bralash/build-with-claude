@@ -584,14 +584,26 @@ body {
 
 .input-wrap {
   display: flex;
-  align-items: flex-end;
-  gap: 0.55rem;
+  flex-direction: column;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 0.6rem 0.6rem 0.6rem 1rem;
+  padding: 0.6rem 0.6rem 0.5rem 1rem;
   transition: border-color 0.2s, box-shadow 0.2s;
   box-shadow: var(--shadow-sm);
+}
+
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.35rem;
+}
+
+.input-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .input-wrap:focus-within {
@@ -1046,15 +1058,7 @@ button#ask-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   vertical-align: middle;
 }
 
-/* ── Action row (Analyze + Facts Lookup) ───────────────────────────────────── */
-.action-row {
-  display: flex;
-  gap: 0.4rem;
-  margin-top: 0.5rem;
-  padding: 0 0.15rem;
-  flex-wrap: wrap;
-}
-
+/* ── Action chips (Analyze + Facts Lookup — live inside .input-toolbar) ─────── */
 .action-chip {
   display: inline-flex;
   align-items: center;
