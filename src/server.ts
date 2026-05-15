@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config({ override: true });
 import express, { Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
 import path from "path";
 
 const app = express();
@@ -189,26 +190,27 @@ app.post("/api/ask-stream", async (req: Request, res: Response): Promise<void> =
   }
 });
 
-// ── Feature 1: Structured JSON Output ────────────────────────────────────────
+// ── Feature 1: Structured JSON Output (via output_config) ────────────────────
 // Schema: { title: string, keyPoints: string[], sentiment: "positive"|"neutral"|"negative", confidence: number, isQuestion: boolean }
-const ANALYZE_SCHEMA = `{
-  "title": string,
-  "keyPoints": string[],
-  "sentiment": "positive" | "neutral" | "negative",
-  "confidence": number,
-  "isQuestion": boolean
-}`;
+const ANALYZE_OUTPUT_FORMAT = jsonSchemaOutputFormat({
+  type: "object",
+  properties: {
+    title:      { type: "string",  description: "3–7 words capturing the essence of the input" },
+    keyPoints:  { type: "array",   items: { type: "string" }, description: "2–4 key points, each under 15 words" },
+    sentiment:  { type: "string",  enum: ["positive", "neutral", "negative"] },
+    confidence: { type: "number",  description: "0–100 confidence in this analysis" },
+    isQuestion: { type: "boolean", description: "true if the input is primarily asking something" },
+  },
+  required: ["title", "keyPoints", "sentiment", "confidence", "isQuestion"],
+  additionalProperties: false,
+});
 
-const ANALYZE_SYSTEM_PROMPT = `You are a JSON analysis engine. \
-Analyse the user's input and respond with ONLY a valid JSON object — no preamble, no markdown fences, no explanation. \
-The object must match this exact schema:
-${ANALYZE_SCHEMA}
-
-Rules:
-- title: 3–7 words capturing the essence of the input
-- keyPoints: 2–4 bullet-style strings, each under 15 words
-- sentiment: overall tone of the input
-- confidence: integer 0–100 reflecting how confident you are in the analysis
+const ANALYZE_SYSTEM_PROMPT = `You are a text analysis engine. \
+Analyse the user's input and fill in each field of the response schema accurately. \
+- title: 3–7 words capturing the essence \
+- keyPoints: 2–4 bullet-style strings, each under 15 words \
+- sentiment: overall tone — positive, neutral, or negative \
+- confidence: integer 0–100 reflecting confidence in this analysis \
 - isQuestion: true only if the input is primarily asking something`;
 
 app.post("/api/analyze", async (req: Request, res: Response): Promise<void> => {
@@ -224,25 +226,17 @@ app.post("/api/analyze", async (req: Request, res: Response): Promise<void> => {
     : DEFAULT_MODEL;
 
   try {
-    const message = await client.messages.create({
+    // client.messages.parse() + output_config guarantees valid JSON matching the schema.
+    // The SDK enforces the schema server-side — no manual JSON.parse() needed.
+    const message = await client.messages.parse({
       model: selectedModel,
       max_tokens: 512,
       system: ANALYZE_SYSTEM_PROMPT,
       messages: [{ role: "user", content: question.trim() }],
+      output_config: { format: ANALYZE_OUTPUT_FORMAT },
     });
 
-    const textBlock = message.content.find((block) => block.type === "text");
-    const rawText = textBlock ? textBlock.text.trim() : "";
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      res.status(502).json({ error: "Claude returned invalid JSON. Please try again." });
-      return;
-    }
-
-    res.json({ analysis: parsed, model: message.model });
+    res.json({ analysis: message.parsed_output, model: message.model });
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
       const status = err.status ?? 500;
