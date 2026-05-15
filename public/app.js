@@ -16,6 +16,8 @@ const themeDarkBtn        = document.getElementById("theme-dark");
 const streamingToggle     = document.getElementById("streaming-toggle");
 const conversationToggle  = document.getElementById("conversation-toggle");
 const newChatBtn          = document.getElementById("new-chat-btn");
+const analyzeBtn          = document.getElementById("analyze-btn");
+const factsBtn            = document.getElementById("facts-btn");
 const conversationListEl  = document.getElementById("conversation-list");
 
 // ── Info panel refs ───────────────────────────────────────────────────────────
@@ -657,9 +659,9 @@ function appendUserMessage(text) {
   scrollToBottom();
 }
 
-function buildAssistantShell(persona, modelId) {
-  const personaMeta = PERSONA_META[persona] || PERSONA_META[DEFAULT_PERSONA];
-  const modelMeta   = MODEL_META[modelId]   || MODEL_META[DEFAULT_MODEL];
+function buildAssistantShell(persona, modelId, actionLabel) {
+  const personaMeta = PERSONA_META[persona]   || PERSONA_META[DEFAULT_PERSONA];
+  const modelMeta   = MODEL_META[modelId]     || MODEL_META[DEFAULT_MODEL];
 
   const wrapper = document.createElement("div");
   wrapper.className = "assistant-message";
@@ -674,10 +676,14 @@ function buildAssistantShell(persona, modelId) {
 
   const header = document.createElement("div");
   header.className = "assistant-header";
+  const actionBadgeHtml = actionLabel
+    ? `<span class="tool-badge">${actionLabel}</span>`
+    : "";
   header.innerHTML = `
     <span class="assistant-name">Molly</span>
     <span class="persona-badge">${personaMeta.label}</span>
-    <span class="model-badge">${modelMeta.label}</span>`;
+    <span class="model-badge">${modelMeta.label}</span>
+    ${actionBadgeHtml}`;
 
   body.appendChild(header);
   wrapper.appendChild(avatar);
@@ -690,4 +696,202 @@ function scrollToBottom() { chatMessages.scrollTop = chatMessages.scrollHeight; 
 function setLoading(on) {
   askBtn.disabled     = on;
   questionEl.disabled = on;
+  analyzeBtn.disabled = on;
+  factsBtn.disabled   = on;
+}
+
+// ── Feature 1: Structured JSON Analyze ───────────────────────────────────────
+analyzeBtn.addEventListener("click", runAnalyze);
+
+async function runAnalyze() {
+  const question = questionEl.value.trim();
+  if (!question) return;
+
+  emptyState.style.display = "none";
+  appendUserMessage(question);
+  questionEl.value = "";
+  questionEl.style.height = "auto";
+  setLoading(true);
+
+  const pair        = document.createElement("div");
+  pair.className    = "message-pair";
+  const assistantEl = buildAssistantShell(currentPersona, currentModel, "Analyze");
+  const bodyEl      = assistantEl.querySelector(".assistant-body");
+  const thinkingEl  = Object.assign(document.createElement("div"), { className: "thinking" });
+  thinkingEl.innerHTML = "<span></span><span></span><span></span>";
+  bodyEl.appendChild(thinkingEl);
+  pair.appendChild(assistantEl);
+  chatMessages.appendChild(pair);
+  scrollToBottom();
+
+  try {
+    const res  = await fetch("/api/analyze", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ question, model: currentModel }),
+    });
+
+    const data = await res.json();
+    thinkingEl.remove();
+
+    if (!res.ok) {
+      const errEl = Object.assign(document.createElement("div"), {
+        className: "error-bubble",
+        textContent: data.error ?? "An unknown error occurred.",
+      });
+      bodyEl.appendChild(errEl);
+      return;
+    }
+
+    bodyEl.appendChild(buildAnalysisCard(data.analysis));
+  } catch {
+    thinkingEl.remove();
+    const errEl = Object.assign(document.createElement("div"), {
+      className: "error-bubble",
+      textContent: "Network error — could not reach the server.",
+    });
+    bodyEl.appendChild(errEl);
+  } finally {
+    setLoading(false);
+    scrollToBottom();
+  }
+}
+
+function buildAnalysisCard(a) {
+  const card = document.createElement("div");
+  card.className = "analysis-card";
+
+  // Title
+  const title = Object.assign(document.createElement("div"), {
+    className: "analysis-title",
+    textContent: a.title ?? "Analysis",
+  });
+  card.appendChild(title);
+
+  // Key points
+  if (Array.isArray(a.keyPoints) && a.keyPoints.length > 0) {
+    const section = document.createElement("div");
+    const label   = Object.assign(document.createElement("span"), {
+      className: "analysis-label",
+      textContent: "Key Points",
+    });
+    const list = document.createElement("ul");
+    list.className = "analysis-key-points";
+    a.keyPoints.forEach((pt) => {
+      const li = Object.assign(document.createElement("li"), { textContent: pt });
+      list.appendChild(li);
+    });
+    section.appendChild(label);
+    section.appendChild(list);
+    card.appendChild(section);
+  }
+
+  // Meta row: sentiment + confidence + isQuestion
+  const meta = document.createElement("div");
+  meta.className = "analysis-meta";
+
+  const sentiment = String(a.sentiment ?? "neutral").toLowerCase();
+  const sentimentBadge = Object.assign(document.createElement("span"), {
+    className: `sentiment-badge ${sentiment}`,
+    textContent: sentiment.charAt(0).toUpperCase() + sentiment.slice(1),
+  });
+  meta.appendChild(sentimentBadge);
+
+  const confidence = typeof a.confidence === "number"
+    ? Math.max(0, Math.min(100, Math.round(a.confidence)))
+    : 0;
+
+  const confWrap = document.createElement("div");
+  confWrap.className = "confidence-wrap";
+  const bar = document.createElement("div");
+  bar.className = "confidence-bar";
+  const fill = document.createElement("div");
+  fill.className = "confidence-fill";
+  fill.style.width = `${confidence}%`;
+  bar.appendChild(fill);
+  const pct = Object.assign(document.createElement("span"), {
+    className: "confidence-pct",
+    textContent: `${confidence}%`,
+  });
+  confWrap.appendChild(bar);
+  confWrap.appendChild(pct);
+  meta.appendChild(confWrap);
+
+  if (a.isQuestion === true) {
+    const qBadge = Object.assign(document.createElement("span"), {
+      className: "question-badge",
+      textContent: "Question",
+    });
+    meta.appendChild(qBadge);
+  }
+
+  card.appendChild(meta);
+  return card;
+}
+
+// ── Feature 2: Tool Use — Facts Lookup ───────────────────────────────────────
+factsBtn.addEventListener("click", runFactsLookup);
+
+async function runFactsLookup() {
+  const question = questionEl.value.trim();
+  if (!question) return;
+
+  emptyState.style.display = "none";
+  appendUserMessage(question);
+  questionEl.value = "";
+  questionEl.style.height = "auto";
+  setLoading(true);
+
+  const pair        = document.createElement("div");
+  pair.className    = "message-pair";
+  const assistantEl = buildAssistantShell(currentPersona, currentModel, "Facts");
+  const bodyEl      = assistantEl.querySelector(".assistant-body");
+  const thinkingEl  = Object.assign(document.createElement("div"), { className: "thinking" });
+  thinkingEl.innerHTML = "<span></span><span></span><span></span>";
+  bodyEl.appendChild(thinkingEl);
+  pair.appendChild(assistantEl);
+  chatMessages.appendChild(pair);
+  scrollToBottom();
+
+  try {
+    const res  = await fetch("/api/tool-ask", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ question, model: currentModel }),
+    });
+
+    const data = await res.json();
+    thinkingEl.remove();
+
+    const contentEl = document.createElement("div");
+    if (!res.ok) {
+      contentEl.className   = "error-bubble";
+      contentEl.textContent = data.error ?? "An unknown error occurred.";
+      bodyEl.appendChild(contentEl);
+      return;
+    }
+
+    contentEl.className = "answer";
+    contentEl.innerHTML = marked.parse(data.answer);
+    bodyEl.appendChild(contentEl);
+
+    if (data.toolUsed) {
+      const assistantHeader = assistantEl.querySelector(".assistant-header");
+      const toolBadge = Object.assign(document.createElement("span"), {
+        className: "tool-badge",
+        textContent: `⚙ ${data.toolUsed}`,
+      });
+      assistantHeader.appendChild(toolBadge);
+    }
+  } catch {
+    thinkingEl.remove();
+    const errEl = Object.assign(document.createElement("div"), {
+      className: "error-bubble",
+      textContent: "Network error — could not reach the server.",
+    });
+    bodyEl.appendChild(errEl);
+  } finally {
+    setLoading(false);
+    scrollToBottom();
+  }
 }

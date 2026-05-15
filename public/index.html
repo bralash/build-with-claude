@@ -65,14 +65,32 @@
         <footer class="input-bar">
           <div class="input-wrap">
             <textarea id="question" rows="1" placeholder="Ask a question…" autofocus></textarea>
-            <button id="ask-btn" aria-label="Send">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2.5"
-                stroke-linecap="round" stroke-linejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
+            <div class="input-toolbar">
+              <div class="input-toolbar-left">
+                <button class="action-chip" id="analyze-btn" title="Analyze as structured JSON">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
+                  Analyze
+                </button>
+                <button class="action-chip" id="facts-btn" title="Look up facts using tool use">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  Facts Lookup
+                </button>
+              </div>
+              <button id="ask-btn" aria-label="Send">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div class="model-row">
@@ -83,8 +101,6 @@
               <button class="model-chip" data-model="claude-opus-4-5">Opus <span class="chip-hint">Capable</span></button>
             </div>
           </div>
-
-
         </footer>
 
       </div><!-- /.main -->

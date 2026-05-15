@@ -584,14 +584,26 @@ body {
 
 .input-wrap {
   display: flex;
-  align-items: flex-end;
-  gap: 0.55rem;
+  flex-direction: column;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 0.6rem 0.6rem 0.6rem 1rem;
+  padding: 0.6rem 0.6rem 0.5rem 1rem;
   transition: border-color 0.2s, box-shadow 0.2s;
   box-shadow: var(--shadow-sm);
+}
+
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.35rem;
+}
+
+.input-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .input-wrap:focus-within {
@@ -1044,6 +1056,184 @@ button#ask-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   padding: 0.1rem 0.45rem;
   color: var(--text-muted);
   vertical-align: middle;
+}
+
+/* ── Action chips (Analyze + Facts Lookup — live inside .input-toolbar) ─────── */
+.action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: "Outfit", sans-serif;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.22rem 0.7rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.action-chip:hover {
+  border-color: var(--accent-border);
+  color: var(--accent-fg);
+  background: var(--accent-subtle);
+}
+
+.action-chip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── Analysis card (Feature 1 output) ──────────────────────────────────────── */
+.analysis-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-border);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  font-size: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.analysis-title {
+  font-family: "DM Serif Display", Georgia, serif;
+  font-style: italic;
+  font-size: 1rem;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.analysis-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+.analysis-key-points {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.analysis-key-points li {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.analysis-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.sentiment-badge {
+  font-size: 0.64rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid transparent;
+}
+
+.sentiment-badge.positive {
+  background: #D8F3DC;
+  color: #1B5E2F;
+  border-color: #95D5A4;
+}
+
+.sentiment-badge.neutral {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.sentiment-badge.negative {
+  background: #FFEAE8;
+  color: #9B2414;
+  border-color: #FFBFB8;
+}
+
+[data-theme="dark"] .sentiment-badge.positive {
+  background: rgba(29,120,50,0.25);
+  color: #6FCF8A;
+  border-color: rgba(111,207,138,0.3);
+}
+
+[data-theme="dark"] .sentiment-badge.negative {
+  background: rgba(155,36,20,0.25);
+  color: #FCAB9A;
+  border-color: rgba(252,171,154,0.3);
+}
+
+.confidence-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 120px;
+}
+
+.confidence-bar {
+  flex: 1;
+  height: 5px;
+  background: var(--bg-elevated);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.confidence-fill {
+  height: 100%;
+  background: var(--accent-border);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.confidence-pct {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.question-badge {
+  font-size: 0.64rem;
+  font-weight: 500;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-fg);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+}
+
+[data-theme="dark"] .question-badge {
+  color: var(--accent-bg);
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+
+/* ── Tool-use badge on assistant header ─────────────────────────────────────── */
+.tool-badge {
+  font-size: 0.62rem;
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
 }
 
 /* ── Dark mode: accent text fix ────────────────────────────────────────────── */
